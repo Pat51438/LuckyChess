@@ -10,6 +10,7 @@ interface SquareProps {
   onPress: (position: Position) => void;
   selected?: boolean;
   isValidMove?: boolean;
+  isInvalidMove?: boolean; // Renommé de isBlockedMove pour plus de clarté
 }
 
 const Square: React.FC<SquareProps> = ({ 
@@ -17,8 +18,9 @@ const Square: React.FC<SquareProps> = ({
   piece, 
   position, 
   onPress, 
-  selected, 
-  isValidMove 
+  selected,
+  isValidMove,
+  isInvalidMove
 }) => {
   return (
     <TouchableOpacity 
@@ -27,6 +29,7 @@ const Square: React.FC<SquareProps> = ({
         dark ? styles.darkSquare : styles.lightSquare,
         selected && styles.selectedSquare,
         isValidMove && styles.validMove,
+        isInvalidMove && styles.invalidMove, // Ces mouvements seront rouges
       ]}
       onPress={() => onPress(position)}
     >
@@ -59,7 +62,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#baca44',
   },
   validMove: {
-    backgroundColor: '#f7f769',
+    backgroundColor: '#f7f769', // Jaune pour les mouvements valides
+  },
+  invalidMove: {
+    backgroundColor: '#ff6b6b', // Rouge pour les mouvements qui ne sauvent pas le roi
   },
 });
 

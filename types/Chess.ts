@@ -35,5 +35,14 @@ export enum PieceType {
     board: Board;
     currentTurn: PlayerColor;
     selectedPiece: Position | null;
-    validMoves: ValidMoves;
+    validMoves: ValidMoves; 
+    blockedMoves: ValidMoves;
+    isInCheck: PlayerColor | null;  
+    isCheckmate: PlayerColor | null;
+  }
+
+  export interface ChessPiece {
+    type: PieceType;
+    color: PlayerColor;
+    hasMoved: boolean;
   }
