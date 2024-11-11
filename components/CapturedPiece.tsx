@@ -1,58 +1,82 @@
 import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import { PlayerColor, Piece, PieceType } from '../types/Chess';
 
 interface CapturedPiecesDisplayProps {
-  capturedPieces: Array<{
-    type: 'PAWN' | 'ROOK' | 'KNIGHT' | 'BISHOP' | 'QUEEN' | 'KING';
-    color: 'WHITE' | 'BLACK';
-  }>;
-  color: 'WHITE' | 'BLACK';
+  capturedPieces: Piece[];
+  color: PlayerColor;
 }
 
-const piecePoints = {
-  PAWN: 1,
-  ROOK: 5,
-  KNIGHT: 3,
-  BISHOP: 3,
-  QUEEN: 8,
-  KING: 0
+const getPieceSymbol = (type: PieceType): string => {
+  switch (type) {
+    case PieceType.PAWN:
+      return '♟';
+    case PieceType.ROOK:
+      return '♜';
+    case PieceType.KNIGHT:
+      return '♞';
+    case PieceType.BISHOP:
+      return '♝';
+    case PieceType.QUEEN:
+      return '♛';
+    case PieceType.KING:
+      return '♚';
+    default:
+      return '';
+  }
 };
 
-const pieceSymbols = {
-  PAWN: '♟',
-  ROOK: '♜',
-  KNIGHT: '♞',
-  BISHOP: '♝',
-  QUEEN: '♛',
-  KING: '♚'
-};
-
-const CapturedPiecesDisplay = ({ capturedPieces, color }: CapturedPiecesDisplayProps) => {
-  const totalPoints = capturedPieces.reduce((sum, piece) => sum + piecePoints[piece.type], 0);
-
+const CapturedPiecesDisplay: React.FC<CapturedPiecesDisplayProps> = ({
+  capturedPieces,
+  color,
+}) => {
   return (
-    <div className="p-4 bg-gray-100 rounded-lg m-2 min-h-[100px] w-full">
-
-      
-      <div className="flex flex-wrap gap-1 mb-2">
+    <View style={styles.container}>
+      <Text style={styles.header}>
+        {color === PlayerColor.WHITE ? "White's captures" : "Black's captures"}
+      </Text>
+      <View style={styles.piecesContainer}>
         {capturedPieces.map((piece, index) => (
-          <span
-            key={index}
-            className={`text-2xl ${
-              color === 'WHITE' 
-                ? 'text-white drop-shadow-[1px_1px_1px_rgba(0,0,0,0.8)]' 
-                : 'text-black'
-            }`}
+          <Text 
+            key={index} 
+            style={[
+              styles.piece,
+              { color: piece.color === PlayerColor.WHITE ? '#fff' : '#000' }
+            ]}
           >
-            {pieceSymbols[piece.type]}
-          </span>
+            {getPieceSymbol(piece.type)}
+          </Text>
         ))}
-      </div>
-      
-      <p className="text-sm font-bold text-gray-600">
-        Points: {totalPoints}
-      </p>
-    </div>
+      </View>
+    </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    width: '100%',
+    padding: 8,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  header: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 4,
+  },
+  piecesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+  piece: {
+    fontSize: 24,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
+});
 
 export default CapturedPiecesDisplay;

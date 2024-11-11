@@ -1,6 +1,10 @@
 import React from 'react';
-import { Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { Text, TouchableOpacity, StyleSheet, Platform, Dimensions } from 'react-native';
 import { PieceType, PlayerColor } from '../types/Chess';
+
+// Obtenir les dimensions de l'écran
+const SCREEN = Dimensions.get('window');
+const PIECE_SIZE = Math.min(SCREEN.width * 0.06, 32);
 
 interface PieceProps {
   type: PieceType;
@@ -45,7 +49,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 0, 0.5)',
   },
   pieceText: {
-    fontSize: 32,
+    fontSize: PIECE_SIZE,
     fontWeight: 'bold',
   },
   whitePiece: Platform.select({
@@ -55,8 +59,9 @@ const styles = StyleSheet.create({
     },
     default: {
       color: '#FFFFFF',
-      // Use a slightly darker white to simulate shadow
-      backgroundColor: '#F0F0F0',
+      textShadowColor: 'rgba(0, 0, 0, 0.75)',
+      textShadowOffset: { width: -1, height: 1 },
+      textShadowRadius: 1,
     },
   }),
   blackPiece: {

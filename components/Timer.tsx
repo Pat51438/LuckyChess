@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 import { PlayerColor } from '../types/Chess';
 
 interface TimerProps {
@@ -9,68 +10,97 @@ interface TimerProps {
 }
 
 const Timer: React.FC<TimerProps> = ({ color, isActive, initialTime, onTimeOut }) => {
-  const [timeLeft, setTimeLeft] = useState(initialTime);
+  const timeLeftRef = useRef(initialTime);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [displayTime, setDisplayTime] = React.useState(initialTime);
+  const hasCalledTimeoutRef = useRef(false);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
+    timeLeftRef.current = initialTime;
+    setDisplayTime(initialTime);
+    hasCalledTimeoutRef.current = false;
+  }, [initialTime]);
 
-    if (isActive && timeLeft > 0) {
-      interval = setInterval(() => {
-        setTimeLeft((prevTime) => {
-          const newTime = prevTime - 1;
-          if (newTime === 0) {
-            onTimeOut(color);
+  useEffect(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    if (isActive && timeLeftRef.current > 0) {
+      intervalRef.current = setInterval(() => {
+        timeLeftRef.current -= 1;
+        setDisplayTime(timeLeftRef.current);
+        
+        if (timeLeftRef.current === 0 && !hasCalledTimeoutRef.current) {
+          hasCalledTimeoutRef.current = true;
+          if (intervalRef.current) {
+            clearInterval(intervalRef.current);
           }
-          return newTime;
-        });
+          onTimeOut(color);
+        }
       }, 1000);
     }
 
     return () => {
-      if (interval) clearInterval(interval);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
     };
-  }, [isActive, timeLeft, color, onTimeOut]);
+  }, [isActive, color, onTimeOut]);
 
-  useEffect(() => {
-    setTimeLeft(initialTime);
-  }, [initialTime]);
-
-  const minutes = Math.floor(timeLeft / 60);
-  const seconds = timeLeft % 60;
+  const minutes = Math.floor(displayTime / 60);
+  const seconds = displayTime % 60;
 
   return (
-    <div 
-      style={{
-        padding: '8px 16px',
-        borderRadius: '8px',
-        backgroundColor: isActive ? '#e3f2fd' : '#f5f5f5',
-        border: '1px solid',
-        borderColor: isActive ? '#90caf9' : '#e0e0e0',
-        width: '100%',
-        maxWidth: '200px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '8px',
-        transition: 'all 0.3s ease',
-      }}
-    >
-      <span style={{ 
-        fontWeight: 'bold',
-        color: '#333',
-      }}>
-        {color === PlayerColor.WHITE ? "White" : "Black"}
-      </span>
-      <span style={{ 
-        fontFamily: 'monospace',
-        fontSize: '1.2em',
-        fontWeight: 'bold',
-        color: timeLeft < 30 ? '#f44336' : '#333',
-      }}>
+    <View style={[
+      styles.container,
+      isActive ? styles.activeContainer : styles.inactiveContainer,
+      timeLeftRef.current === 0 && styles.timeoutContainer
+    ]}>
+      <Text style={[
+        styles.timerText,
+        displayTime < 30 && styles.lowTimeText,
+        timeLeftRef.current === 0 && styles.timeoutText
+      ]}>
         {`${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`}
-      </span>
-    </div>
+      </Text>
+    </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#f0f0f0',
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  activeContainer: {
+    backgroundColor: '#e3f2fd',
+    borderColor: '#90caf9',
+  },
+  inactiveContainer: {
+    backgroundColor: '#f5f5f5',
+    borderColor: '#e0e0e0',
+  },
+  timeoutContainer: {
+    backgroundColor: '#ffebee',
+    borderColor: '#ef9a9a',
+  },
+  timerText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    color: '#333',
+  },
+  lowTimeText: {
+    color: '#f44336',
+  },
+  timeoutText: {
+    color: '#d32f2f',
+  }
+});
 
 export default Timer;
