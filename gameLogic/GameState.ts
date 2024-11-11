@@ -62,14 +62,320 @@ import {
       return board;
     }
   
-    public resetGame(): void {
-      this.board = this.createInitialBoard();
-      this.currentTurn = PlayerColor.WHITE;
-      this.selectedPiece = null;
-      this.validMoves = [];
-      this.blockedMoves = [];
+    private isValidPosition(row: number, col: number): boolean {
+      return row >= 0 && row < 8 && col >= 0 && col < 8;
+    }
+  
+    private cloneBoard(): Board {
+      return this.board.map(row =>
+        row.map(square => ({
+          ...square,
+          piece: square.piece ? { ...square.piece } : null
+        }))
+      );
+    }
+  
+    private findKingPosition(color: PlayerColor, board: Board): Position {
+      for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 8; col++) {
+          const piece = board[row][col].piece;
+          if (piece && piece.type === PieceType.KING && piece.color === color) {
+            return { row, col };
+          }
+        }
+      }
+      throw new Error(`King not found for color: ${color}`);
+    }
+  
+    private isSquareUnderAttack(position: Position, byColor: PlayerColor, board: Board = this.board): boolean {
+      for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 8; col++) {
+          const piece = board[row][col].piece;
+          if (piece && piece.color === byColor) {
+            const moves = this.calculateRawMovesByPieceType({ row, col }, piece.type, board);
+            if (moves.some(move => move.row === position.row && move.col === position.col)) {
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    }
+  
+    private calculatePawnMovesRaw(position: Position, validMoves: ValidMoves, blockedMoves: ValidMoves, board: Board): void {
+      const piece = board[position.row][position.col].piece;
+      if (!piece) return;
+  
+      const direction = piece.color === PlayerColor.WHITE ? -1 : 1;
+      const startRow = piece.color === PlayerColor.WHITE ? 6 : 1;
+  
+      // Forward move
+      if (this.isValidPosition(position.row + direction, position.col) &&
+          !board[position.row + direction][position.col].piece) {
+        validMoves.push({ row: position.row + direction, col: position.col });
+  
+        // Double move from starting position
+        if (position.row === startRow &&
+            this.isValidPosition(position.row + 2 * direction, position.col) &&
+            !board[position.row + 2 * direction][position.col].piece) {
+          validMoves.push({ row: position.row + 2 * direction, col: position.col });
+        }
+      }
+  
+      // Captures
+      for (const colOffset of [-1, 1]) {
+        const newRow = position.row + direction;
+        const newCol = position.col + colOffset;
+  
+        if (this.isValidPosition(newRow, newCol)) {
+          const targetPiece = board[newRow][newCol].piece;
+          if (targetPiece && targetPiece.color !== piece.color) {
+            validMoves.push({ row: newRow, col: newCol });
+          } else if (targetPiece) {
+            blockedMoves.push({ row: newRow, col: newCol });
+          }
+        }
+      }
+    }
+  
+    private calculateRookMovesRaw(position: Position, validMoves: ValidMoves, blockedMoves: ValidMoves, board: Board): void {
+      const directions = [
+        { row: -1, col: 0 },  // up
+        { row: 1, col: 0 },   // down
+        { row: 0, col: -1 },  // left
+        { row: 0, col: 1 }    // right
+      ];
+  
+      this.calculateLineMovementsRaw(position, directions, validMoves, blockedMoves, board);
+    }
+  
+    private calculateBishopMovesRaw(position: Position, validMoves: ValidMoves, blockedMoves: ValidMoves, board: Board): void {
+      const directions = [
+        { row: -1, col: -1 },  // up-left
+        { row: -1, col: 1 },   // up-right
+        { row: 1, col: -1 },   // down-left
+        { row: 1, col: 1 }     // down-right
+      ];
+  
+      this.calculateLineMovementsRaw(position, directions, validMoves, blockedMoves, board);
+    }
+  
+    private calculateQueenMovesRaw(position: Position, validMoves: ValidMoves, blockedMoves: ValidMoves, board: Board): void {
+      this.calculateRookMovesRaw(position, validMoves, blockedMoves, board);
+      this.calculateBishopMovesRaw(position, validMoves, blockedMoves, board);
+    }
+  
+    private calculateKnightMovesRaw(position: Position, validMoves: ValidMoves, blockedMoves: ValidMoves, board: Board): void {
+      const moves = [
+        { row: -2, col: -1 }, { row: -2, col: 1 },
+        { row: -1, col: -2 }, { row: -1, col: 2 },
+        { row: 1, col: -2 }, { row: 1, col: 2 },
+        { row: 2, col: -1 }, { row: 2, col: 1 }
+      ];
+  
+      const piece = board[position.row][position.col].piece;
+      if (!piece) return;
+  
+      for (const move of moves) {
+        const newRow = position.row + move.row;
+        const newCol = position.col + move.col;
+  
+        if (this.isValidPosition(newRow, newCol)) {
+          const targetPiece = board[newRow][newCol].piece;
+          if (!targetPiece || targetPiece.color !== piece.color) {
+            validMoves.push({ row: newRow, col: newCol });
+          } else {
+            blockedMoves.push({ row: newRow, col: newCol });
+          }
+        }
+      }
+    }
+  
+    private calculateKingMovesRaw(position: Position, validMoves: ValidMoves, blockedMoves: ValidMoves, board: Board): void {
+      const moves = [
+        { row: -1, col: -1 }, { row: -1, col: 0 }, { row: -1, col: 1 },
+        { row: 0, col: -1 },                        { row: 0, col: 1 },
+        { row: 1, col: -1 },  { row: 1, col: 0 },  { row: 1, col: 1 }
+      ];
+  
+      const piece = board[position.row][position.col].piece;
+      if (!piece) return;
+  
+      for (const move of moves) {
+        const newRow = position.row + move.row;
+        const newCol = position.col + move.col;
+  
+        if (this.isValidPosition(newRow, newCol)) {
+          const targetPiece = board[newRow][newCol].piece;
+          if (!targetPiece || targetPiece.color !== piece.color) {
+            validMoves.push({ row: newRow, col: newCol });
+          } else {
+            blockedMoves.push({ row: newRow, col: newCol });
+          }
+        }
+      }
+    }
+  
+    private calculateLineMovementsRaw(
+      position: Position,
+      directions: Array<{ row: number, col: number }>,
+      validMoves: ValidMoves,
+      blockedMoves: ValidMoves,
+      board: Board
+    ): void {
+      const piece = board[position.row][position.col].piece;
+      if (!piece) return;
+  
+      for (const direction of directions) {
+        let currentRow = position.row + direction.row;
+        let currentCol = position.col + direction.col;
+  
+        while (this.isValidPosition(currentRow, currentCol)) {
+          const targetPiece = board[currentRow][currentCol].piece;
+          if (!targetPiece) {
+            validMoves.push({ row: currentRow, col: currentCol });
+          } else {
+            if (targetPiece.color !== piece.color) {
+              validMoves.push({ row: currentRow, col: currentCol });
+            } else {
+              blockedMoves.push({ row: currentRow, col: currentCol });
+            }
+            break;
+          }
+  
+          currentRow += direction.row;
+          currentCol += direction.col;
+        }
+      }
+    }
+  
+    private calculateRawMovesByPieceType(position: Position, pieceType: PieceType, board: Board = this.board): ValidMoves {
+      const moves: ValidMoves = [];
+      const blockedMoves: ValidMoves = [];
+      
+      switch (pieceType) {
+        case PieceType.PAWN:
+          this.calculatePawnMovesRaw(position, moves, blockedMoves, board);
+          break;
+        case PieceType.ROOK:
+          this.calculateRookMovesRaw(position, moves, blockedMoves, board);
+          break;
+        case PieceType.KNIGHT:
+          this.calculateKnightMovesRaw(position, moves, blockedMoves, board);
+          break;
+        case PieceType.BISHOP:
+          this.calculateBishopMovesRaw(position, moves, blockedMoves, board);
+          break;
+        case PieceType.QUEEN:
+          this.calculateQueenMovesRaw(position, moves, blockedMoves, board);
+          break;
+        case PieceType.KING:
+          this.calculateKingMovesRaw(position, moves, blockedMoves, board);
+          break;
+      }
+      return moves;
+    }
+  
+    private checkForCheck(): void {
       this.isInCheck = null;
-      this.isCheckmate = null;
+      
+      const colors = [PlayerColor.WHITE, PlayerColor.BLACK];
+      
+      for (const color of colors) {
+        try {
+          const kingPosition = this.findKingPosition(color, this.board);
+          const opponentColor = color === PlayerColor.WHITE ? PlayerColor.BLACK : PlayerColor.WHITE;
+          
+          if (this.isSquareUnderAttack(kingPosition, opponentColor)) {
+            this.isInCheck = color;
+          }
+        } catch (error) {
+          console.error(`Error checking for check: ${error}`);
+        }
+      }
+    }
+  
+    private checkForCheckmate(): void {
+      if (!this.isInCheck) {
+        this.isCheckmate = null;
+        return;
+      }
+  
+      const checkedColor = this.isInCheck;
+  
+      // Check all pieces of the checked color for any legal moves
+      for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 8; col++) {
+          const piece = this.board[row][col].piece;
+          if (piece && piece.color === checkedColor) {
+            const moves = this.getValidMovesForPiece({ row, col });
+            if (moves.length > 0) {
+              this.isCheckmate = null;
+              return; // Found at least one legal move, not checkmate
+            }
+          }
+        }
+      }
+  
+      // If we get here, no legal moves were found
+      this.isCheckmate = checkedColor;
+    }
+  
+    private getValidMovesForPiece(position: Position): Position[] {
+      const piece = this.board[position.row][position.col].piece;
+      if (!piece) return [];
+  
+      // Get all possible moves without check validation
+      const rawMoves = this.calculateRawMovesByPieceType(position, piece.type);
+      
+      // If the king is in check, we need to filter moves that block the check or capture the attacking piece
+      if (this.isInCheck === piece.color) {
+        return rawMoves.filter(move => {
+          const tempBoard = this.cloneBoard();
+          // Make the move on the temporary board
+          tempBoard[move.row][move.col].piece = tempBoard[position.row][position.col].piece;
+          tempBoard[position.row][position.col].piece = null;
+          
+          try {
+            // Find king's position after the move
+            const kingPos = piece.type === PieceType.KING ? 
+              move : 
+              this.findKingPosition(piece.color, tempBoard);
+            
+            const opponentColor = piece.color === PlayerColor.WHITE ? PlayerColor.BLACK : PlayerColor.WHITE;
+            
+            // Check if the king would still be in check after this move
+            const wouldStillBeInCheck = this.isSquareUnderAttack(kingPos, opponentColor, tempBoard);
+            
+            return !wouldStillBeInCheck;
+          } catch (error) {
+            console.error(`Error validating move: ${error}`);
+            return false;
+          }
+        });
+      }
+      
+      // If not in check, filter moves that would put the king in check
+      return rawMoves.filter(move => {
+        const tempBoard = this.cloneBoard();
+        tempBoard[move.row][move.col].piece = tempBoard[position.row][position.col].piece;
+        tempBoard[position.row][position.col].piece = null;
+        
+        try {
+          const kingPos = piece.type === PieceType.KING ? 
+            move : 
+            this.findKingPosition(piece.color, tempBoard);
+          
+          const opponentColor = piece.color === PlayerColor.WHITE ? PlayerColor.BLACK : PlayerColor.WHITE;
+          
+          const wouldBeInCheck = this.isSquareUnderAttack(kingPos, opponentColor, tempBoard);
+        
+          return !wouldBeInCheck;
+        } catch (error) {
+          console.error(`Error validating move: ${error}`);
+          return false;
+        }
+      });
     }
   
     public getState(): GameState {
@@ -95,37 +401,67 @@ import {
       }
   
       this.selectedPiece = position;
-      const moves = this.calculateValidMovesForPiece(position);
-      this.validMoves = moves.validMoves;
-      this.blockedMoves = moves.blockedMoves;
+      const legalMoves = this.getValidMovesForPiece(position);
+      const rawMoves = this.calculateRawMovesByPieceType(position, piece.type);
+      
+      this.validMoves = legalMoves;
+      this.blockedMoves = rawMoves.filter(move => 
+        !legalMoves.some(legal => 
+          legal.row === move.row && legal.col === move.col
+        )
+      );
     }
   
     public movePiece(from: Position, to: Position): boolean {
-      // Vérifier si le mouvement est valide
-      if (!this.validMoves.some(move => move.row === to.row && move.col === to.col)) {
+      // Get valid moves that don't leave king in check
+      const validMoves = this.getValidMovesForPiece(from);
+      const isValidMove = validMoves.some(move => move.row === to.row && move.col === to.col);
+  
+      if (!isValidMove) {
         return false;
       }
   
+      // Make the move
       const piece = this.board[from.row][from.col].piece;
       if (!piece) return false;
   
-      // Effectuer le mouvement
-      this.board[to.row][to.col].piece = { ...piece };
+      this.board[to.row][to.col].piece = piece;
       this.board[from.row][from.col].piece = null;
   
-      // Changer le tour
-      this.currentTurn = this.currentTurn === PlayerColor.WHITE ? PlayerColor.BLACK : PlayerColor.WHITE;
+      // Handle pawn promotion
+      if (piece.type === PieceType.PAWN) {
+        if ((piece.color === PlayerColor.WHITE && to.row === 0) ||
+            (piece.color === PlayerColor.BLACK && to.row === 7)) {
+          this.board[to.row][to.col].piece = {
+            type: PieceType.QUEEN,
+            color: piece.color
+          };
+        }
+      }
   
-      // Réinitialiser la sélection
+      // Update game state
+      this.currentTurn = this.currentTurn === PlayerColor.WHITE ? PlayerColor.BLACK : PlayerColor.WHITE;
       this.selectedPiece = null;
       this.validMoves = [];
       this.blockedMoves = [];
   
-      // Mettre à jour l'état du jeu
+      // Check for check and checkmate after the move
       this.checkForCheck();
-      this.checkForCheckmate();
+      if (this.isInCheck) {
+        this.checkForCheckmate();
+      }
   
       return true;
+    }
+  
+    public resetGame(): void {
+      this.board = this.createInitialBoard();
+      this.currentTurn = PlayerColor.WHITE;
+      this.selectedPiece = null;
+      this.validMoves = [];
+      this.blockedMoves = [];
+      this.isInCheck = null;
+      this.isCheckmate = null;
     }
   
     public promotePawn(position: Position, newType: PieceType = PieceType.QUEEN): void {
@@ -144,216 +480,16 @@ import {
         color: piece.color
       };
   
-      this.updateGameState();
-    }
-  
-    private calculateValidMovesForPiece(position: Position): { validMoves: ValidMoves, blockedMoves: ValidMoves } {
-      const piece = this.board[position.row][position.col].piece;
-      if (!piece) return { validMoves: [], blockedMoves: [] };
-  
-      const validMoves: ValidMoves = [];
-      const blockedMoves: ValidMoves = [];
-  
-      switch (piece.type) {
-        case PieceType.PAWN:
-          this.calculatePawnMoves(position, validMoves, blockedMoves);
-          break;
-        case PieceType.ROOK:
-          this.calculateRookMoves(position, validMoves, blockedMoves);
-          break;
-        case PieceType.KNIGHT:
-          this.calculateKnightMoves(position, validMoves, blockedMoves);
-          break;
-        case PieceType.BISHOP:
-          this.calculateBishopMoves(position, validMoves, blockedMoves);
-          break;
-        case PieceType.QUEEN:
-          this.calculateQueenMoves(position, validMoves, blockedMoves);
-          break;
-        case PieceType.KING:
-          this.calculateKingMoves(position, validMoves, blockedMoves);
-          break;
-      }
-  
-      return { validMoves, blockedMoves };
-    }
-  
-    private calculatePawnMoves(position: Position, validMoves: ValidMoves, blockedMoves: ValidMoves): void {
-      const piece = this.board[position.row][position.col].piece;
-      if (!piece) return;
-  
-      const direction = piece.color === PlayerColor.WHITE ? -1 : 1;
-      const startRow = piece.color === PlayerColor.WHITE ? 6 : 1;
-  
-      // Mouvement en avant
-      if (this.isValidPosition(position.row + direction, position.col) &&
-          !this.board[position.row + direction][position.col].piece) {
-        validMoves.push({ row: position.row + direction, col: position.col });
-  
-        // Double mouvement depuis la position initiale
-        if (position.row === startRow &&
-            this.isValidPosition(position.row + 2 * direction, position.col) &&
-            !this.board[position.row + 2 * direction][position.col].piece) {
-          validMoves.push({ row: position.row + 2 * direction, col: position.col });
-        }
-      }
-  
-      // Captures en diagonale
-      for (const colOffset of [-1, 1]) {
-        const newRow = position.row + direction;
-        const newCol = position.col + colOffset;
-  
-        if (this.isValidPosition(newRow, newCol)) {
-          const targetPiece = this.board[newRow][newCol].piece;
-          if (targetPiece && targetPiece.color !== piece.color) {
-            validMoves.push({ row: newRow, col: newCol });
-          } else if (targetPiece) {
-            blockedMoves.push({ row: newRow, col: newCol });
-          }
-        }
-      }
-    }
-  
-    private calculateRookMoves(position: Position, validMoves: ValidMoves, blockedMoves: ValidMoves): void {
-      const directions = [
-        { row: -1, col: 0 },  // up
-        { row: 1, col: 0 },   // down
-        { row: 0, col: -1 },  // left
-        { row: 0, col: 1 }    // right
-      ];
-  
-      this.calculateLineMovements(position, directions, validMoves, blockedMoves);
-    }
-  
-    private calculateBishopMoves(position: Position, validMoves: ValidMoves, blockedMoves: ValidMoves): void {
-      const directions = [
-        { row: -1, col: -1 },  // up-left
-        { row: -1, col: 1 },   // up-right
-        { row: 1, col: -1 },   // down-left
-        { row: 1, col: 1 }     // down-right
-      ];
-  
-      this.calculateLineMovements(position, directions, validMoves, blockedMoves);
-    }
-  
-    private calculateQueenMoves(position: Position, validMoves: ValidMoves, blockedMoves: ValidMoves): void {
-      this.calculateRookMoves(position, validMoves, blockedMoves);
-      this.calculateBishopMoves(position, validMoves, blockedMoves);
-    }
-  
-    private calculateKnightMoves(position: Position, validMoves: ValidMoves, blockedMoves: ValidMoves): void {
-      const moves = [
-        { row: -2, col: -1 }, { row: -2, col: 1 },
-        { row: -1, col: -2 }, { row: -1, col: 2 },
-        { row: 1, col: -2 }, { row: 1, col: 2 },
-        { row: 2, col: -1 }, { row: 2, col: 1 }
-      ];
-  
-      const piece = this.board[position.row][position.col].piece;
-      if (!piece) return;
-  
-      for (const move of moves) {
-        const newRow = position.row + move.row;
-        const newCol = position.col + move.col;
-  
-        if (this.isValidPosition(newRow, newCol)) {
-          const targetPiece = this.board[newRow][newCol].piece;
-          if (!targetPiece) {
-            validMoves.push({ row: newRow, col: newCol });
-          } else if (targetPiece.color !== piece.color) {
-            validMoves.push({ row: newRow, col: newCol });
-          } else {
-            blockedMoves.push({ row: newRow, col: newCol });
-          }
-        }
-      }
-    }
-  
-    private calculateKingMoves(position: Position, validMoves: ValidMoves, blockedMoves: ValidMoves): void {
-      const moves = [
-        { row: -1, col: -1 }, { row: -1, col: 0 }, { row: -1, col: 1 },
-        { row: 0, col: -1 },                        { row: 0, col: 1 },
-        { row: 1, col: -1 },  { row: 1, col: 0 },  { row: 1, col: 1 }
-      ];
-  
-      const piece = this.board[position.row][position.col].piece;
-      if (!piece) return;
-  
-      for (const move of moves) {
-        const newRow = position.row + move.row;
-        const newCol = position.col + move.col;
-  
-        if (this.isValidPosition(newRow, newCol)) {
-          const targetPiece = this.board[newRow][newCol].piece;
-          if (!targetPiece) {
-            validMoves.push({ row: newRow, col: newCol });
-          } else if (targetPiece.color !== piece.color) {
-            validMoves.push({ row: newRow, col: newCol });
-          } else {
-            blockedMoves.push({ row: newRow, col: newCol });
-          }
-        }
-      }
-    }
-  
-    private calculateLineMovements(
-      position: Position,
-      directions: Array<{ row: number, col: number }>,
-      validMoves: ValidMoves,
-      blockedMoves: ValidMoves
-    ): void {
-      const piece = this.board[position.row][position.col].piece;
-      if (!piece) return;
-  
-      for (const direction of directions) {
-        let currentRow = position.row + direction.row;
-        let currentCol = position.col + direction.col;
-  
-        while (this.isValidPosition(currentRow, currentCol)) {
-          const targetPiece = this.board[currentRow][currentCol].piece;
-          if (!targetPiece) {
-            validMoves.push({ row: currentRow, col: currentCol });
-          } else {
-            if (targetPiece.color !== piece.color) {
-              validMoves.push({ row: currentRow, col: currentCol });
-            } else {
-              blockedMoves.push({ row: currentRow, col: currentCol });
-            }
-            break;
-          }
-  
-          currentRow += direction.row;
-          currentCol += direction.col;
-        }
-      }
-    }
-  
-    private isValidPosition(row: number, col: number): boolean {
-        return row >= 0 && row < 8 && col >= 0 && col < 8;
-      }
-    
-      private checkForCheck(): void {
-        // Cette méthode devrait vérifier si un roi est en échec
-        this.isInCheck = null;
-      }
-    
-      private checkForCheckmate(): void {
-        // Cette méthode devrait vérifier si le roi est en échec et mat
-        this.isCheckmate = null;
-      }
-    
-      private updateGameState(): void {
-        // Calculer les mouvements valides pour la nouvelle position
-        if (this.selectedPiece) {
-          const moves = this.calculateValidMovesForPiece(this.selectedPiece);
-          this.validMoves = moves.validMoves;
-          this.blockedMoves = moves.blockedMoves;
-        }
-        
-        // Vérifier l'état d'échec
-        this.checkForCheck();
-        
-        // Vérifier l'état d'échec et mat
+      // Check for check/checkmate after promotion
+      this.checkForCheck();
+      if (this.isInCheck) {
         this.checkForCheckmate();
       }
     }
+  
+    public unselectPiece(): void {
+      this.selectedPiece = null;
+      this.validMoves = [];
+      this.blockedMoves = [];
+    }
+  }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { PieceType, PlayerColor } from '../types/Chess';
 
 interface PieceProps {
@@ -9,7 +9,6 @@ interface PieceProps {
   selected?: boolean;
 }
 
-// Utilisation des symboles pleins pour les pièces blanches
 const pieceSymbols: Record<PieceType, Record<PlayerColor, string>> = {
   [PieceType.KING]: { [PlayerColor.WHITE]: '♚', [PlayerColor.BLACK]: '♚' },
   [PieceType.QUEEN]: { [PlayerColor.WHITE]: '♛', [PlayerColor.BLACK]: '♛' },
@@ -49,12 +48,17 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: 'bold',
   },
-  whitePiece: {
-    color: '#FFFFFF',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 1,
-  },
+  whitePiece: Platform.select({
+    web: {
+      color: '#FFFFFF',
+      filter: 'drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.8))',
+    },
+    default: {
+      color: '#FFFFFF',
+      // Use a slightly darker white to simulate shadow
+      backgroundColor: '#F0F0F0',
+    },
+  }),
   blackPiece: {
     color: '#000000',
   },
