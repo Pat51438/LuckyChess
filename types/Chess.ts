@@ -20,6 +20,7 @@ export enum PieceType {
   export interface Piece {
     type: PieceType;
     color: PlayerColor;
+    hasMoved: boolean;
   }
   
   export interface Square {
@@ -39,10 +40,17 @@ export enum PieceType {
     blockedMoves: ValidMoves;
     isInCheck: PlayerColor | null;  
     isCheckmate: PlayerColor | null;
+    lastMove: LastMove | null;
   }
 
   export interface ChessPiece {
     type: PieceType;
     color: PlayerColor;
     hasMoved: boolean;
+  }
+
+  export interface LastMove {
+    from: Position;
+    to: Position;
+    piece: Piece;
   }

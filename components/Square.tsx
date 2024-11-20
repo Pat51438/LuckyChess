@@ -11,7 +11,8 @@ interface SquareProps {
   selected?: boolean;
   isValidMove?: boolean;
   isInvalidMove?: boolean;
-  isInCheck?: boolean; // Nouvelle prop pour indiquer si la case contient un roi en échec
+  isInCheck?: boolean;
+  isCastlingPartner?: boolean;
 }
 
 const Square: React.FC<SquareProps> = ({ 
@@ -22,21 +23,23 @@ const Square: React.FC<SquareProps> = ({
   selected,
   isValidMove,
   isInvalidMove,
-  isInCheck = false // Valeur par défaut false
+  isInCheck = false,
+  isCastlingPartner = false
 }) => {
-  const [flashValue] = useState(new Animated.Value(0));
+  const [checkFlashValue] = useState(new Animated.Value(0));
+  const [castlingFlashValue] = useState(new Animated.Value(0));
 
   useEffect(() => {
     if (isInCheck) {
-      // Animation qui fait flasher entre rouge normal et rouge clair
+      // Animation pour l'échec
       Animated.loop(
         Animated.sequence([
-          Animated.timing(flashValue, {
+          Animated.timing(checkFlashValue, {
             toValue: 1,
             duration: 500,
             useNativeDriver: false,
           }),
-          Animated.timing(flashValue, {
+          Animated.timing(checkFlashValue, {
             toValue: 0,
             duration: 500,
             useNativeDriver: false,
@@ -44,13 +47,47 @@ const Square: React.FC<SquareProps> = ({
         ])
       ).start();
     } else {
-      flashValue.setValue(0);
+      checkFlashValue.setValue(0);
     }
   }, [isInCheck]);
 
-  const backgroundColor = flashValue.interpolate({
+  useEffect(() => {
+    if (isCastlingPartner) {
+      // Animation pour le partenaire de roque
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(castlingFlashValue, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: false,
+          }),
+          Animated.timing(castlingFlashValue, {
+            toValue: 0,
+            duration: 600,
+            useNativeDriver: false,
+          }),
+        ])
+      ).start();
+    } else {
+      castlingFlashValue.setValue(0);
+      // Arrêter l'animation quand isCastlingPartner devient false
+      castlingFlashValue.stopAnimation();
+    }
+
+    // Cleanup function pour arrêter l'animation quand le composant est démonté
+    return () => {
+      castlingFlashValue.stopAnimation();
+    };
+  }, [isCastlingPartner]);
+
+  const checkBackgroundColor = checkFlashValue.interpolate({
     inputRange: [0, 1],
     outputRange: ['#ff4444', '#ff8888'],
+  });
+
+  const castlingBackgroundColor = castlingFlashValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['rgba(65, 105, 225, 0.3)', 'rgba(65, 105, 225, 0.7)'], // Royal Blue avec différentes opacités
   });
 
   return (
@@ -60,7 +97,8 @@ const Square: React.FC<SquareProps> = ({
       selected && styles.selectedSquare,
       isValidMove && styles.validMove,
       isInvalidMove && styles.invalidMove,
-      isInCheck && { backgroundColor },
+      isInCheck && { backgroundColor: checkBackgroundColor },
+      isCastlingPartner && { backgroundColor: castlingBackgroundColor },
     ]}>
       <TouchableOpacity 
         style={styles.touchable}
