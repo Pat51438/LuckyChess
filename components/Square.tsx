@@ -1,109 +1,41 @@
-import React, { useEffect, useState } from 'react';
-import { TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import React from 'react';
+import { TouchableOpacity, StyleSheet, View } from 'react-native';
 import Piece from './Piece';
-import { Piece as PieceType, Position, PlayerColor, PieceType as ChessPieceType } from '../types/Chess';
+import { Piece as PieceType, Position } from '../types/Chess';
 
 interface SquareProps {
   dark: boolean;
   piece: PieceType | null;
   position: Position;
   onPress: (position: Position) => void;
-  selected?: boolean;
-  isValidMove?: boolean;
-  isInvalidMove?: boolean;
-  isInCheck?: boolean;
-  isCastlingPartner?: boolean;
+  selected: boolean;
+  isValidMove: boolean;
 }
 
-const Square: React.FC<SquareProps> = ({ 
-  dark, 
-  piece, 
-  position, 
-  onPress, 
+const Square: React.FC<SquareProps> = React.memo(({
+  dark,
+  piece,
+  position,
+  onPress,
   selected,
   isValidMove,
-  isInvalidMove,
-  isInCheck = false,
-  isCastlingPartner = false
 }) => {
-  const [checkFlashValue] = useState(new Animated.Value(0));
-  const [castlingFlashValue] = useState(new Animated.Value(0));
-
-  useEffect(() => {
-    if (isInCheck) {
-      // Animation pour l'échec
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(checkFlashValue, {
-            toValue: 1,
-            duration: 500,
-            useNativeDriver: false,
-          }),
-          Animated.timing(checkFlashValue, {
-            toValue: 0,
-            duration: 500,
-            useNativeDriver: false,
-          }),
-        ])
-      ).start();
-    } else {
-      checkFlashValue.setValue(0);
-    }
-  }, [isInCheck]);
-
-  useEffect(() => {
-    if (isCastlingPartner) {
-      // Animation pour le partenaire de roque
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(castlingFlashValue, {
-            toValue: 1,
-            duration: 600,
-            useNativeDriver: false,
-          }),
-          Animated.timing(castlingFlashValue, {
-            toValue: 0,
-            duration: 600,
-            useNativeDriver: false,
-          }),
-        ])
-      ).start();
-    } else {
-      castlingFlashValue.setValue(0);
-      // Arrêter l'animation quand isCastlingPartner devient false
-      castlingFlashValue.stopAnimation();
-    }
-
-    // Cleanup function pour arrêter l'animation quand le composant est démonté
-    return () => {
-      castlingFlashValue.stopAnimation();
-    };
-  }, [isCastlingPartner]);
-
-  const checkBackgroundColor = checkFlashValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['#ff4444', '#ff8888'],
-  });
-
-  const castlingBackgroundColor = castlingFlashValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['rgba(65, 105, 225, 0.3)', 'rgba(65, 105, 225, 0.7)'], // Royal Blue avec différentes opacités
-  });
+  console.log(`Square rendering at ${position.row},${position.col} - selected: ${selected}`); // Debug log
 
   return (
-    <Animated.View style={[
-      styles.square,
-      dark ? styles.darkSquare : styles.lightSquare,
-      selected && styles.selectedSquare,
-      isValidMove && styles.validMove,
-      isInvalidMove && styles.invalidMove,
-      isInCheck && { backgroundColor: checkBackgroundColor },
-      isCastlingPartner && { backgroundColor: castlingBackgroundColor },
-    ]}>
-      <TouchableOpacity 
-        style={styles.touchable}
-        onPress={() => onPress(position)}
-      >
+    <TouchableOpacity
+      style={[
+        styles.square,
+        dark ? styles.darkSquare : styles.lightSquare,
+      ]}
+      onPress={() => onPress(position)}
+      activeOpacity={0.7}
+    >
+      <View style={[
+        styles.squareOverlay,
+        selected && styles.selectedSquare,
+        isValidMove && styles.validMove,
+      ]}>
         {piece && (
           <Piece
             type={piece.type}
@@ -112,10 +44,10 @@ const Square: React.FC<SquareProps> = ({
             selected={selected}
           />
         )}
-      </TouchableOpacity>
-    </Animated.View>
+      </View>
+    </TouchableOpacity>
   );
-};
+});
 
 const styles = StyleSheet.create({
   square: {
@@ -124,7 +56,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     aspectRatio: 1,
   },
-  touchable: {
+  squareOverlay: {
+    position: 'absolute',
     width: '100%',
     height: '100%',
     justifyContent: 'center',
@@ -137,13 +70,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#eeeed2',
   },
   selectedSquare: {
-    backgroundColor: '#baca44',
+    backgroundColor: 'rgba(255, 255, 0, 0.5)',  // Semi-transparent yellow
   },
   validMove: {
-    backgroundColor: '#f7f769',
-  },
-  invalidMove: {
-    backgroundColor: '#ff6b6b',
+    backgroundColor: 'rgba(0, 255, 0, 0.3)',    // Semi-transparent green
   },
 });
 

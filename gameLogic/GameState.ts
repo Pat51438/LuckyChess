@@ -409,46 +409,77 @@ export class ChessGameState {
   }
 
   public rollDice(): DiceRoll {
-    if (this.isInCheck || !this.waitingForDiceRoll) {
-      return {
-        value: 0,
-        moves: 0,
-        player: this.currentTurn
-      };
+    console.log('Rolling dice, current state:', {
+        waitingForDiceRoll: this.waitingForDiceRoll,
+        currentTurn: this.currentTurn,
+        remainingMoves: this.remainingMoves
+    });
+
+    if (!this.waitingForDiceRoll) {
+        return {
+            value: 0,
+            moves: this.remainingMoves,
+            player: this.currentTurn
+        };
     }
 
     const value = Math.floor(Math.random() * 6) + 1;
     let player: PlayerColor;
     let moves: number;
 
+    // Si le dé est 1-3, c'est aux blancs avec ce nombre de mouvements
+    // Si le dé est 4-6, c'est aux noirs avec (valeur - 3) mouvements
     if (value <= 3) {
-      player = PlayerColor.WHITE;
-      moves = value;
+        player = PlayerColor.WHITE;
+        moves = value;
     } else {
-      player = PlayerColor.BLACK;
-      moves = value - 3;
+        player = PlayerColor.BLACK;
+        moves = value - 3;
     }
 
+    // Mettre à jour l'état du jeu
     this.lastDiceRoll = { value, moves, player };
     this.currentTurn = player;
     this.remainingMoves = moves;
     this.waitingForDiceRoll = false;
 
+    console.log('Dice roll completed, new state:', {
+        value,
+        player,
+        moves,
+        waitingForDiceRoll: this.waitingForDiceRoll,
+        currentTurn: this.currentTurn
+    });
+
     return this.lastDiceRoll;
-  }
+}
 
   public tossCoin(): CoinToss {
-    if (this.isInCheck || !this.waitingForCoinToss) {
-      return { result: this.currentTurn };
+    console.log('Tossing coin, current state:', {
+        waitingForCoinToss: this.waitingForCoinToss,
+        currentTurn: this.currentTurn
+    });
+
+    if (!this.waitingForCoinToss) {
+        return { result: this.currentTurn };
     }
 
     const result = Math.random() < 0.5 ? PlayerColor.WHITE : PlayerColor.BLACK;
+    
+    // Mettre à jour l'état du jeu
     this.lastCoinToss = { result };
     this.currentTurn = result;
-    this.waitingForCoinToss = false;
+    this.waitingForCoinToss = false; // Important : désactiver l'attente du lancer
+    
+    console.log('Coin toss completed, new state:', {
+        result,
+        waitingForCoinToss: this.waitingForCoinToss,
+        currentTurn: this.currentTurn
+    });
 
     return this.lastCoinToss;
-  }
+}
+
 
   private checkForCheck(): void {
     this.isInCheck = null;
@@ -523,14 +554,14 @@ export class ChessGameState {
 
   public getState(): GameState {
     return {
-      board: this.board,
+      board: [...this.board],
       currentTurn: this.currentTurn,
-      selectedPiece: this.selectedPiece,
-      validMoves: this.validMoves,
-      blockedMoves: this.blockedMoves,
+      selectedPiece: this.selectedPiece ? { ...this.selectedPiece } : null,
+      validMoves: [...this.validMoves],
+      blockedMoves: [...this.blockedMoves],
       isInCheck: this.isInCheck,
       isCheckmate: this.isCheckmate,
-      lastMove: this.lastMove,
+      lastMove: this.lastMove ? { ...this.lastMove } : null,
       gameType: this.gameType,
       remainingMoves: this.remainingMoves,
       waitingForCoinToss: this.waitingForCoinToss,
@@ -539,37 +570,56 @@ export class ChessGameState {
   }
 
   public selectPiece(position: Position): void {
+    console.log('Selecting piece at position:', position); // Debug log
+    
     const piece = this.board[position.row][position.col].piece;
     
     if (!piece || piece.color !== this.currentTurn) {
-      this.selectedPiece = null;
-      this.validMoves = [];
-      this.blockedMoves = [];
-      return;
+        console.log('Invalid piece selection - clearing selection'); // Debug log
+        this.selectedPiece = null;
+        this.validMoves = [];
+        this.blockedMoves = [];
+        return;
     }
 
-    this.selectedPiece = position;
-    const legalMoves = this.getValidMovesForPiece(position);
+    console.log('Valid piece selected:', piece); // Debug log
+    
+    // Définir la pièce sélectionnée
+    this.selectedPiece = {
+        row: position.row,
+        col: position.col
+    };
+    
+    // Calculer les mouvements valides
+    this.validMoves = this.getValidMovesForPiece(position);
+    console.log('Valid moves:', this.validMoves); // Debug log
+
+    // Calculer les mouvements bloqués
     const rawMoves = this.calculateRawMovesByPieceType(position, piece.type);
-    
-    const castlingPartners = this.getCastlingPartners(position);
-    this.validMoves = [...legalMoves, ...castlingPartners];
-    
     this.blockedMoves = rawMoves.filter(move => 
-      !this.validMoves.some(valid => 
-        valid.row === move.row && valid.col === move.col
-      )
+        !this.validMoves.some(validMove => 
+            validMove.row === move.row && validMove.col === move.col
+        )
     );
-  }
+}
+
 
   public movePiece(from: Position, to: Position): boolean {
+    // Vérifications de base
+    const fromPiece = this.board[from.row][from.col].piece;
+    if (!fromPiece) return false;
+    if (fromPiece.color !== this.currentTurn) return false;
+
     // Vérifier si le mouvement est autorisé selon le type de jeu
     if (this.gameType === 'dice' && this.remainingMoves <= 0) return false;
     if (this.gameType === 'coinToss' && this.waitingForCoinToss) return false;
     if (this.gameType === 'dice' && this.waitingForDiceRoll) return false;
 
-    const fromPiece = this.board[from.row][from.col].piece;
-    if (!fromPiece) return false;
+    // Obtenir les mouvements valides pour la pièce sélectionnée
+    const validMoves = this.getValidMovesForPiece(from);
+    const isValidMove = validMoves.some(move => move.row === to.row && move.col === to.col);
+    
+    if (!isValidMove) return false;
 
     // Gestion du roque
     if (fromPiece.type === PieceType.KING) {
@@ -608,11 +658,6 @@ export class ChessGameState {
       }
     }
 
-    const validMoves = this.getValidMovesForPiece(from);
-    if (!validMoves.some(move => move.row === to.row && move.col === to.col)) {
-      return false;
-    }
-
     // En passant capture
     if (fromPiece.type === PieceType.PAWN && this.isEnPassantPossible(from, to)) {
       this.board[from.row][to.col].piece = null;
@@ -632,35 +677,53 @@ export class ChessGameState {
     this.handlePostMove();
     return true;
   }
-
   private handlePostMove(): void {
-    // Gestion des états post-mouvement selon le type de jeu
-    if (this.gameType === 'dice') {
-      this.remainingMoves--;
-      if (this.remainingMoves <= 0 && !this.isInCheck) {
-        this.waitingForDiceRoll = true;
-      }
-    } else if (this.gameType === 'coinToss' && !this.isInCheck) {
-      this.waitingForCoinToss = true;
-    } else {
-      this.currentTurn = this.currentTurn === PlayerColor.WHITE ? PlayerColor.BLACK : PlayerColor.WHITE;
-    }
-
+    // Réinitialiser sélection et mouvements
     this.selectedPiece = null;
     this.validMoves = [];
     this.blockedMoves = [];
-    
+
+    // Vérifier l'échec
     this.checkForCheck();
+    
+    // Si le roi est en échec
     if (this.isInCheck) {
-      this.checkForCheckmate();
-      if (this.isInCheck) {
-        // En cas d'échec, le tour passe à l'autre joueur
-        this.waitingForDiceRoll = false;
-        this.waitingForCoinToss = false;
+        this.checkForCheckmate();
+        // En cas d'échec, forcer le changement de tour et réinitialiser les états d'attente
+        this.waitingForDiceRoll = this.gameType === 'dice';
+        this.waitingForCoinToss = this.gameType === 'coinToss';
+        this.remainingMoves = 0;
         this.currentTurn = this.currentTurn === PlayerColor.WHITE ? PlayerColor.BLACK : PlayerColor.WHITE;
-      }
+        return;
     }
-  }
+
+    // Gérer le prochain tour selon le type de jeu
+    switch (this.gameType) {
+        case 'dice':
+            // Décrémenter les mouvements restants
+            this.remainingMoves--;
+            console.log('Remaining moves:', this.remainingMoves);
+            
+            // Si plus de mouvements, activer le lancer de dé pour le prochain tour
+            if (this.remainingMoves <= 0) {
+                this.waitingForDiceRoll = true;
+                this.remainingMoves = 0;
+            }
+            break;
+
+        case 'coinToss':
+            // Après chaque mouvement en mode coinToss, on attend un nouveau lancer
+            this.waitingForCoinToss = true;
+            break;
+
+        default:
+            // Mode normal : alterner entre blanc et noir
+            this.currentTurn = this.currentTurn === PlayerColor.WHITE ? PlayerColor.BLACK : PlayerColor.WHITE;
+            break;
+    }
+}
+
+  
 
   public resetGame(): void {
     this.board = this.createInitialBoard();
