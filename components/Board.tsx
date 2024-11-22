@@ -4,7 +4,7 @@ import Square from "./Square";
 import Button from "./Button";
 import Timer from "./Timer";
 import CapturedPiecesDisplay from "./CapturedPiece";
-import { PlayerColor, Position, PieceType, Piece } from "../types/Chess";
+import { PlayerColor, Position, PieceType, Piece, GameType } from "../types/Chess";
 import { ChessGameState } from "../gameLogic/GameState";
 
 const INITIAL_TIME = 600; // 10 minutes in seconds
@@ -12,150 +12,15 @@ const INITIAL_TIME = 600; // 10 minutes in seconds
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const BOARD_SIZE = Math.min(screenWidth * 0.95, screenHeight * 0.6);
 
+interface BoardProps {
+  gameType: GameType;
+  onReturnToMenu: () => void;
+}
+
 type GameEndReason = 'checkmate' | 'timeout' | 'forfeit' | null;
 
-const styles = StyleSheet.create({
-  // ... tous les styles restent identiques ...
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    paddingVertical: 10,
-  },
-  mainContainer: {
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerContainer: {
-    width: '100%',
-    alignItems: 'center',
-    marginBottom: 5,
-  },
-  buttonContainer: {
-    width: '80%',
-    minWidth: 200,
-    maxWidth: 300,
-  },
-  gameContainer: {
-    width: '100%',
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'space-between',
-  },
-  boardSection: {
-    width: BOARD_SIZE,
-    aspectRatio: 1,
-    marginVertical: 10,
-  },
-  capturedPiecesArea: {
-    width: BOARD_SIZE,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 5,
-    backgroundColor: '#f5f5f5',
-    zIndex: 1,
-  },
-  upperArea: {
-    width: '100%',
-    alignItems: 'center',
-    marginBottom: 5,
-  },
-  lowerArea: {
-    width: '100%',
-    alignItems: 'center',
-    marginTop: 5,
-  },
-  board: {
-    width: '100%',
-    aspectRatio: 1,
-    borderWidth: 2,
-    borderColor: '#666',
-    backgroundColor: 'white',
-    overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 5,
-      },
-    }),
-  },
-  row: {
-    flex: 1,
-    flexDirection: 'row',
-  },
-  turnIndicator: {
-    marginTop: 15,
-    alignItems: 'center',
-  },
-  turnIndicatorText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 24,
-    width: '80%',
-    maxWidth: 400,
-    alignItems: 'center',
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 16,
-    color: '#333',
-    textAlign: 'center',
-  },
-  modalText: {
-    fontSize: 18,
-    marginBottom: 24,
-    color: '#666',
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
-    columnGap: 10,
-  },
-  modalButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    minWidth: 120,
-    alignItems: 'center',
-  },
-  confirmButton: {
-    backgroundColor: '#2196F3',
-  },
-  cancelButton: {
-    backgroundColor: '#757575',
-  },
-  buttonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-});
-
-const Board: React.FC = () => {
-  const [gameEngine] = useState(new ChessGameState());
+const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
+  const [gameEngine] = useState(() => new ChessGameState(gameType));
   const [, setUpdateTrigger] = useState(0);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [capturedByWhite, setCapturedByWhite] = useState<Piece[]>([]);
@@ -311,7 +176,6 @@ const Board: React.FC = () => {
           }
         }
   
-
         if (
           state.selectedPiece.row === position.row &&
           state.selectedPiece.col === position.col
@@ -425,6 +289,12 @@ const Board: React.FC = () => {
         <View style={styles.headerContainer}>
           <View style={styles.buttonContainer}>
             <Button onNewGame={handleNewGame} variant="primary" size="medium" />
+            <TouchableOpacity 
+              style={styles.menuButton}
+              onPress={onReturnToMenu}
+            >
+              <Text style={styles.menuButtonText}>Return to Menu</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -461,7 +331,7 @@ const Board: React.FC = () => {
                       square.piece?.type === PieceType.KING && 
                       square.piece?.color === state.isInCheck);
 
-                      const isCastlingPartner = state.selectedPiece ? 
+                    const isCastlingPartner = state.selectedPiece ? 
                       getCastlingPartners(state.selectedPiece).some(
                         partner => partner.row === rowIndex && partner.col === colIndex
                       ) : false;
@@ -490,57 +360,208 @@ const Board: React.FC = () => {
             <View style={styles.capturedPiecesArea}>
               <Timer
                 key={`white-${timerKey}`}
-                color={PlayerColor.WHITE}
-                isActive={state.currentTurn === PlayerColor.WHITE && !state.isCheckmate && !timeoutWinner && !gameOver}
-                initialTime={INITIAL_TIME}
-                onTimeOut={handleTimeOut}
-              />
-              <CapturedPiecesDisplay
-                capturedPieces={capturedByWhite}
-                color={PlayerColor.WHITE}
-              />
-            </View>
-          </View>
+               color={PlayerColor.WHITE}
+               isActive={state.currentTurn === PlayerColor.WHITE && !state.isCheckmate && !timeoutWinner && !gameOver}
+               initialTime={INITIAL_TIME}
+               onTimeOut={handleTimeOut}
+             />
+             <CapturedPiecesDisplay
+               capturedPieces={capturedByWhite}
+               color={PlayerColor.WHITE}
+             />
+           </View>
+         </View>
 
-          <View style={styles.turnIndicator}>
-            <Text style={styles.turnIndicatorText}>
-              {gameOver 
-                ? getGameOverMessage()
-                : `${state.currentTurn === PlayerColor.WHITE ? "White" : "Black"}'s turn`}
-            </Text>
-          </View>
-        </View>
-      </View>
+         <View style={styles.turnIndicator}>
+           <Text style={styles.turnIndicatorText}>
+             {gameOver 
+               ? getGameOverMessage()
+               : `${state.currentTurn === PlayerColor.WHITE ? "White" : "Black"}'s turn`}
+           </Text>
+         </View>
+       </View>
+     </View>
 
-      {/* Modal de fin de partie */}
-      <Modal
-        visible={showConfirmDialog && !gameOver}
-        transparent={true}
-        animationType="fade"
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>New Game</Text>
-            <Text style={styles.modalText}>Do you want to start a new game?</Text>
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setShowConfirmDialog(false)}
-              >
-                <Text style={styles.buttonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.confirmButton]}
-                onPress={confirmNewGame}
-              >
-                <Text style={styles.buttonText}>Yes</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    </View>
-  );
+     {/* Modal de fin de partie */}
+     <Modal
+       visible={showConfirmDialog && !gameOver}
+       transparent={true}
+       animationType="fade"
+     >
+       <View style={styles.modalOverlay}>
+         <View style={styles.modalContent}>
+           <Text style={styles.modalTitle}>New Game</Text>
+           <Text style={styles.modalText}>Do you want to start a new game?</Text>
+           <View style={styles.modalButtons}>
+             <TouchableOpacity
+               style={[styles.modalButton, styles.cancelButton]}
+               onPress={() => setShowConfirmDialog(false)}
+             >
+               <Text style={styles.buttonText}>Cancel</Text>
+             </TouchableOpacity>
+             <TouchableOpacity
+               style={[styles.modalButton, styles.confirmButton]}
+               onPress={confirmNewGame}
+             >
+               <Text style={styles.buttonText}>Yes</Text>
+             </TouchableOpacity>
+           </View>
+         </View>
+       </View>
+     </Modal>
+   </View>
+ );
 };
+
+const styles = StyleSheet.create({
+ container: {
+   flex: 1,
+   alignItems: 'center',
+   backgroundColor: '#f5f5f5',
+   paddingVertical: 10,
+ },
+ mainContainer: {
+   width: '100%',
+   height: '100%',
+   alignItems: 'center',
+   justifyContent: 'space-between',
+ },
+ headerContainer: {
+   width: '100%',
+   alignItems: 'center',
+   marginBottom: 5,
+ },
+ buttonContainer: {
+   width: '80%',
+   minWidth: 200,
+   maxWidth: 300,
+   gap: 10,
+ },
+ menuButton: {
+   backgroundColor: '#666',
+   padding: 10,
+   borderRadius: 8,
+   alignItems: 'center',
+ },
+ menuButtonText: {
+   color: 'white',
+   fontSize: 16,
+   fontWeight: 'bold',
+ },
+ gameContainer: {
+   width: '100%',
+   alignItems: 'center',
+   flex: 1,
+   justifyContent: 'space-between',
+ },
+ boardSection: {
+   width: BOARD_SIZE,
+   aspectRatio: 1,
+   marginVertical: 10,
+ },
+ capturedPiecesArea: {
+   width: BOARD_SIZE,
+   flexDirection: 'row',
+   alignItems: 'center',
+   justifyContent: 'space-between',
+   padding: 5,
+   backgroundColor: '#f5f5f5',
+   zIndex: 1,
+ },
+ upperArea: {
+   width: '100%',
+   alignItems: 'center',
+   marginBottom: 5,
+ },
+ lowerArea: {
+   width: '100%',
+   alignItems: 'center',
+   marginTop: 5,
+ },
+ board: {
+   width: '100%',
+   aspectRatio: 1,
+   borderWidth: 2,
+   borderColor: '#666',
+   backgroundColor: 'white',
+   overflow: 'hidden',
+   ...Platform.select({
+     ios: {
+       shadowColor: '#000',
+       shadowOffset: { width: 0, height: 2 },
+       shadowOpacity: 0.25,
+       shadowRadius: 4,
+     },
+     android: {
+       elevation: 5,
+     },
+   }),
+ },
+ row: {
+   flex: 1,
+   flexDirection: 'row',
+ },
+ turnIndicator: {
+   marginTop: 15,
+   alignItems: 'center',
+ },
+ turnIndicatorText: {
+   fontSize: 18,
+   fontWeight: 'bold',
+   color: '#333',
+ },
+ modalOverlay: {
+   flex: 1,
+   backgroundColor: 'rgba(0, 0, 0, 0.7)',
+   justifyContent: 'center',
+   alignItems: 'center',
+ },
+ modalContent: {
+   backgroundColor: 'white',
+   borderRadius: 12,
+   padding: 24,
+   width: '80%',
+   maxWidth: 400,
+   alignItems: 'center',
+ },
+ modalTitle: {
+   fontSize: 24,
+   fontWeight: 'bold',
+   marginBottom: 16,
+   color: '#333',
+   textAlign: 'center',
+ },
+ modalText: {
+   fontSize: 18,
+   marginBottom: 24,
+   color: '#666',
+   textAlign: 'center',
+   lineHeight: 24,
+ },
+ modalButtons: {
+   flexDirection: 'row',
+   justifyContent: 'space-around',
+   width: '100%',
+   columnGap: 10,
+ },
+ modalButton: {
+   paddingVertical: 12,
+   paddingHorizontal: 24,
+   borderRadius: 8,
+   minWidth: 120,
+   alignItems: 'center',
+ },
+ confirmButton: {
+   backgroundColor: '#2196F3',
+ },
+ cancelButton: {
+   backgroundColor: '#757575',
+ },
+ buttonText: {
+   color: 'white',
+   fontSize: 16,
+   fontWeight: 'bold',
+ },
+});
 
 export default Board;

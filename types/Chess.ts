@@ -1,3 +1,6 @@
+// Chess.ts
+export type GameType = 'dice' | 'coinToss';
+
 export enum PieceType {
     PAWN = 'PAWN',
     ROOK = 'ROOK',
@@ -5,52 +8,50 @@ export enum PieceType {
     BISHOP = 'BISHOP',
     QUEEN = 'QUEEN',
     KING = 'KING'
-  }
+}
   
-  export enum PlayerColor {
+export enum PlayerColor {
     WHITE = 'WHITE',
     BLACK = 'BLACK'
-  }
+}
   
-  export interface Position {
+export interface Position {
     row: number;
     col: number;
-  }
+}
   
-  export interface Piece {
+export interface Piece {
     type: PieceType;
     color: PlayerColor;
     hasMoved: boolean;
-  }
+}
   
-  export interface Square {
+export interface Square {
     piece: Piece | null;
     position: Position;
-  }
+}
   
-  export type Board = Square[][];
-  export type ValidMove = Position;
-  export type ValidMoves = ValidMove[];
-  
-  export interface GameState {
-    board: Board;
-    currentTurn: PlayerColor;
-    selectedPiece: Position | null;
-    validMoves: ValidMoves; 
-    blockedMoves: ValidMoves;
-    isInCheck: PlayerColor | null;  
-    isCheckmate: PlayerColor | null;
-    lastMove: LastMove | null;
-  }
+export type Board = Square[][];
+export type ValidMove = Position;
+export type ValidMoves = ValidMove[];
 
-  export interface ChessPiece {
-    type: PieceType;
-    color: PlayerColor;
-    hasMoved: boolean;
-  }
-
-  export interface LastMove {
+export interface LastMove {
     from: Position;
     to: Position;
     piece: Piece;
-  }
+}
+
+export interface GameState {
+  board: Board;
+  currentTurn: PlayerColor;
+  selectedPiece: Position | null;
+  validMoves: ValidMoves; 
+  blockedMoves: ValidMoves;
+  isInCheck: PlayerColor | null;  
+  isCheckmate: PlayerColor | null;
+  lastMove: LastMove | null;
+  gameType: GameType;
+  remainingMoves: number;
+  waitingForCoinToss: boolean;
+  waitingForDiceRoll: boolean;
+}
