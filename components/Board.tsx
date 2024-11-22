@@ -8,7 +8,8 @@ import CoinTosser from "./CoinTosser";
 import DiceRoller from "./DiceRoller";
 import GameInfo from "./GameInfo";
 import { PlayerColor, Position, PieceType, Piece, GameType } from "../types/Chess";
-import { ChessGameState } from "../gameLogic/GameState";
+import { CoinTossChessState } from "../gameLogic/CoinTossGameState";
+import { DiceChessState } from "../gameLogic/DiceGameState";
 import { DiceRoll } from "../types/DiceGame";
 import { CoinToss } from "../types/CoinTossGame";
 
@@ -25,7 +26,9 @@ interface BoardProps {
 type GameEndReason = 'checkmate' | 'timeout' | 'forfeit' | null;
 
 const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
-  const [gameEngine] = useState(() => new ChessGameState(gameType));
+  const [gameEngine] = useState(() => 
+    gameType === 'coinToss' ? new CoinTossChessState() : new DiceChessState()
+  );
   const [updateTrigger, setUpdateTrigger] = useState(0);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [capturedByWhite, setCapturedByWhite] = useState<Piece[]>([]);
@@ -69,44 +72,24 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
   }, [gameEngine]);
 
   const handleDiceRoll = useCallback((result: DiceRoll) => {
-    console.log('Dice roll result:', result); // Debug log
-    
-    // Appliquer le résultat du lancer de dé
-    const diceResult = gameEngine.rollDice();
-    
-    // Mettre à jour l'état du jeu
-    const newState = gameEngine.getState();
-    setCurrentPlayer(newState.currentTurn);
-    
-    // Forcer la mise à jour du composant
-    forceUpdate();
-    
-    console.log('Game state after dice roll:', {
-        waitingForDiceRoll: newState.waitingForDiceRoll,
-        currentTurn: newState.currentTurn,
-        remainingMoves: newState.remainingMoves
-    }); // Debug log
-}, [gameEngine, setCurrentPlayer, forceUpdate]);
+    if (gameType === 'dice') {
+      const diceEngine = gameEngine as DiceChessState;
+      const diceResult = diceEngine.rollDice();
+      const newState = diceEngine.getState();
+      setCurrentPlayer(newState.currentTurn);
+      forceUpdate();
+    }
+  }, [gameEngine, setCurrentPlayer, forceUpdate]);
 
   const handleCoinToss = useCallback((result: CoinToss) => {
-    console.log('Coin toss result:', result); // Debug log
-    
-    // Appliquer le résultat du lancer de pièce
-    gameEngine.tossCoin();
-    
-    // Mettre à jour l'état du jeu
-    const newState = gameEngine.getState();
-    setCurrentPlayer(newState.currentTurn);
-    
-    // Forcer la mise à jour du composant
-    forceUpdate();
-    
-    console.log('Game state after coin toss:', {
-        waitingForCoinToss: newState.waitingForCoinToss,
-        currentTurn: newState.currentTurn
-    }); // Debug log
-}, [gameEngine, setCurrentPlayer, forceUpdate]);
-
+    if (gameType === 'coinToss') {
+      const coinEngine = gameEngine as CoinTossChessState;
+      const coinResult = coinEngine.tossCoin();
+      const newState = coinEngine.getState();
+      setCurrentPlayer(newState.currentTurn);
+      forceUpdate();
+    }
+  }, [gameEngine, setCurrentPlayer, forceUpdate]);
   const confirmNewGame = useCallback(() => {
     gameEngine.resetGame();
     setCapturedByWhite([]);
@@ -162,28 +145,23 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
 
   const handleSquarePress = useCallback(
     (position: Position) => {
-      console.log('Square pressed:', position); // Debug log
+
       
       const state = gameEngine.getState();
-      console.log('Current state:', {
-        currentTurn: state.currentTurn,
-        selectedPiece: state.selectedPiece,
-        validMoves: state.validMoves
-      }); // Debug log
       
       // Prevent moves if game is over
       if (state.isCheckmate || gameOver || timeoutWinner) {
-        console.log('Game is over or blocked'); // Debug log
+    
         return;
       }
 
       // Prevent moves if waiting for coin toss or dice roll
       if (gameType === 'coinToss' && state.waitingForCoinToss) {
-        console.log('Waiting for coin toss'); // Debug log
+        
         return;
       }
       if (gameType === 'dice' && (state.waitingForDiceRoll || state.remainingMoves <= 0)) {
-        console.log('Waiting for dice roll or no moves remaining'); // Debug log
+      
         return;
       }
 
@@ -192,11 +170,11 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
 
       // Si une pièce est déjà sélectionnée
       if (state.selectedPiece) {
-        console.log('A piece is already selected'); // Debug log
+
         
         // Clicking the same piece - deselect it
         if (state.selectedPiece.row === position.row && state.selectedPiece.col === position.col) {
-          console.log('Deselecting piece'); // Debug log
+        
           gameEngine.unselectPiece();
           forceUpdate();
           return;
@@ -204,7 +182,7 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
 
         // Try to move the selected piece
         const moveSuccessful = gameEngine.movePiece(state.selectedPiece, position);
-        console.log('Move attempt result:', moveSuccessful); // Debug log
+    
         
         if (moveSuccessful) {
           // Handle captures
@@ -225,7 +203,7 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
         
         // If the move wasn't successful and we clicked another one of our pieces, select it instead
         if (targetPiece && targetPiece.color === state.currentTurn) {
-          console.log('Selecting new piece instead'); // Debug log
+
           gameEngine.selectPiece(position);
           forceUpdate();
           return;
@@ -233,7 +211,7 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
       } else {
         // No piece is selected - try to select a piece
         if (targetPiece && targetPiece.color === state.currentTurn) {
-          console.log('Selecting new piece'); // Debug log
+       
           gameEngine.selectPiece(position);
           forceUpdate();
         }

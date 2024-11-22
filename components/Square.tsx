@@ -20,7 +20,7 @@ const Square: React.FC<SquareProps> = React.memo(({
   selected,
   isValidMove,
 }) => {
-  console.log(`Square rendering at ${position.row},${position.col} - selected: ${selected}`); // Debug log
+
 
   return (
     <TouchableOpacity
