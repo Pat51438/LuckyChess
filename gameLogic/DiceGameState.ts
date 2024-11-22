@@ -570,22 +570,38 @@ import {
     }
   }
 
-  public rollDice(): DiceRoll {
+  public rollDice(value: number): DiceRoll {
     if (!this.waitingForDiceRoll) {
-      return {
-        value: 0,
-        moves: this.remainingMoves,
-        player: this.currentTurn
-      };
+        return {
+            value: 0,
+            moves: this.remainingMoves,
+            player: this.currentTurn
+        };
     }
 
-    const value = Math.floor(Math.random() * 6) + 1;
-    
-    const result: DiceRoll = {
-      value,
-      moves: value <= 3 ? value : value - 3,
-      player: value <= 3 ? PlayerColor.WHITE : PlayerColor.BLACK
-    };
+    let result: DiceRoll;
+    switch (value) {
+        case 1:
+            result = { value: 1, moves: 1, player: PlayerColor.WHITE };
+            break;
+        case 2:
+            result = { value: 2, moves: 2, player: PlayerColor.WHITE };
+            break;
+        case 3:
+            result = { value: 3, moves: 3, player: PlayerColor.WHITE };
+            break;
+        case 4:
+            result = { value: 4, moves: 1, player: PlayerColor.BLACK };
+            break;
+        case 5:
+            result = { value: 5, moves: 2, player: PlayerColor.BLACK };
+            break;
+        case 6:
+            result = { value: 6, moves: 3, player: PlayerColor.BLACK };
+            break;
+        default:
+            result = { value: 1, moves: 1, player: PlayerColor.WHITE };
+    }
 
     this.lastDiceRoll = result;
     this.currentTurn = result.player;
@@ -593,8 +609,7 @@ import {
     this.waitingForDiceRoll = false;
 
     return result;
-  }
-
+}
   public resetGame(): void {
     this.board = this.createInitialBoard();
     this.currentTurn = PlayerColor.WHITE;

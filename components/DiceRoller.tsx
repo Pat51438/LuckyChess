@@ -29,7 +29,6 @@ const DiceRoller: React.FC<DiceRollerProps> = ({
         if (!isWaitingForRoll || isAnimating) return;
     
         setIsAnimating(true);
-        // Utiliser la même valeur pour l'affichage et la logique
         const roll = Math.floor(Math.random() * 6) + 1;
         setLastRoll(roll);
     
@@ -40,10 +39,11 @@ const DiceRoller: React.FC<DiceRollerProps> = ({
             useNativeDriver: true,
         }).start(() => {
             setIsAnimating(false);
-            // Passer exactement la valeur du dé, sans logique
-            onDiceRoll({ value: roll, moves: 0, player: PlayerColor.WHITE });
+            // Important: pass the roll value directly
+            onDiceRoll({ value: roll, moves: roll <= 3 ? roll : roll - 3, player: roll <= 3 ? PlayerColor.WHITE : PlayerColor.BLACK });
         });
     };
+    
     
 
     return (
@@ -72,13 +72,13 @@ const DiceRoller: React.FC<DiceRollerProps> = ({
             </Animated.View>
           </TouchableOpacity>
           {!isWaitingForRoll && remainingMoves > 0 && (
-            <Text 
-              style={styles.singleLineText} 
-              numberOfLines={1}
-              ellipsizeMode="tail"
-            >
-              {currentPlayer === PlayerColor.WHITE ? 'White' : 'Black'} gets {remainingMoves} move • {remainingMoves} left
-            </Text>
+    <Text 
+        style={styles.singleLineText} 
+        numberOfLines={1}
+        ellipsizeMode="tail"
+    >
+        {currentPlayer === PlayerColor.WHITE ? 'White' : 'Black'} gets {remainingMoves} move{remainingMoves > 1 ? 's' : ''} • {remainingMoves} left
+    </Text>
           )}
         </View>
       </View>

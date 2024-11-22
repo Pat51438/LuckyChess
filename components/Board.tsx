@@ -73,13 +73,14 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
 
   const handleDiceRoll = useCallback((result: DiceRoll) => {
     if (gameType === 'dice') {
-      const diceEngine = gameEngine as DiceChessState;
-      const diceResult = diceEngine.rollDice();
-      const newState = diceEngine.getState();
-      setCurrentPlayer(newState.currentTurn);
-      forceUpdate();
+        const diceEngine = gameEngine as DiceChessState;
+        // Pass the received roll result directly
+        const diceResult = diceEngine.rollDice(result.value);
+        const newState = diceEngine.getState();
+        setCurrentPlayer(newState.currentTurn);
+        forceUpdate();
     }
-  }, [gameEngine, setCurrentPlayer, forceUpdate]);
+}, [gameEngine, setCurrentPlayer, forceUpdate]);
 
   const handleCoinToss = useCallback((result: CoinToss) => {
     if (gameType === 'coinToss') {
