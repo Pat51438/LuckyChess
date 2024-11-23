@@ -6,12 +6,13 @@ import Timer from "./Timer";
 import CapturedPiecesDisplay from "./CapturedPiece";
 import CoinTosser from "./CoinTosser";
 import DiceRoller from "./DiceRoller";
-import GameInfo from "./GameInfo";
+import GameOverModal from "./GameOverModal";
 import { PlayerColor, Position, PieceType, Piece, GameType } from "../types/Chess";
 import { CoinTossChessState } from "../gameLogic/CoinTossGameState";
 import { DiceChessState } from "../gameLogic/DiceGameState";
 import { DiceRoll } from "../types/DiceGame";
 import { CoinToss } from "../types/CoinTossGame";
+import { GameEndReason } from "./GameOverModal";
 
 const INITIAL_TIME = 600; // 10 minutes in seconds
 
@@ -22,8 +23,6 @@ interface BoardProps {
   gameType: GameType;
   onReturnToMenu: () => void;
 }
-
-type GameEndReason = 'checkmate' | 'timeout' | 'forfeit' | null;
 
 const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
   const [gameEngine] = useState(() => 
@@ -41,11 +40,8 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
   const [timerKey, setTimerKey] = useState(0);
   const [lastDiceRoll, setLastDiceRoll] = useState<DiceRoll | null>(null);
   const [lastCoinToss, setLastCoinToss] = useState<CoinToss | null>(null);
-  const [lastMove, setLastMove] = useState<{
-    piece: string;
-    from: string;
-    to: string;
-  } | null>(null);
+  const [castlingPartner, setCastlingPartner] = useState<Position | null>(null);
+  const [castlingInitiator, setCastlingInitiator] = useState<Position | null>(null);
 
   const forceUpdate = useCallback(() => {
     setUpdateTrigger((prev) => prev + 1);
@@ -73,14 +69,13 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
 
   const handleDiceRoll = useCallback((result: DiceRoll) => {
     if (gameType === 'dice') {
-        const diceEngine = gameEngine as DiceChessState;
-        // Pass the received roll result directly
-        const diceResult = diceEngine.rollDice(result.value);
-        const newState = diceEngine.getState();
-        setCurrentPlayer(newState.currentTurn);
-        forceUpdate();
+      const diceEngine = gameEngine as DiceChessState;
+      const diceResult = diceEngine.rollDice(result.value);
+      const newState = diceEngine.getState();
+      setCurrentPlayer(newState.currentTurn);
+      forceUpdate();
     }
-}, [gameEngine, setCurrentPlayer, forceUpdate]);
+  }, [gameEngine, setCurrentPlayer, forceUpdate, gameType]);
 
   const handleCoinToss = useCallback((result: CoinToss) => {
     if (gameType === 'coinToss') {
@@ -90,7 +85,8 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
       setCurrentPlayer(newState.currentTurn);
       forceUpdate();
     }
-  }, [gameEngine, setCurrentPlayer, forceUpdate]);
+  }, [gameEngine, setCurrentPlayer, forceUpdate, gameType]);
+
   const confirmNewGame = useCallback(() => {
     gameEngine.resetGame();
     setCapturedByWhite([]);
@@ -103,66 +99,24 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
     setTimerKey((prev) => prev + 1);
     setLastDiceRoll(null);
     setLastCoinToss(null);
-    setLastMove(null);
+    setCastlingPartner(null);
+    setCastlingInitiator(null);
     forceUpdate();
     setShowConfirmDialog(false);
   }, [gameEngine, forceUpdate]);
 
-  const getCastlingPartners = (position: Position): Position[] => {
-    const state = gameEngine.getState();
-    const piece = state.board[position.row][position.col].piece;
-    if (!piece || piece.hasMoved) return [];
-  
-    const row = piece.color === PlayerColor.WHITE ? 7 : 0;
-    const castlingPartners: Position[] = [];
-  
-    if (piece.type === PieceType.KING && position.col === 4) {
-      const kingRook = state.board[row][7].piece;
-      if (kingRook && kingRook.type === PieceType.ROOK && !kingRook.hasMoved &&
-          !state.board[row][5].piece && !state.board[row][6].piece) {
-        castlingPartners.push({ row, col: 7 });
-      }
-  
-      const queenRook = state.board[row][0].piece;
-      if (queenRook && queenRook.type === PieceType.ROOK && !queenRook.hasMoved &&
-          !state.board[row][1].piece && !state.board[row][2].piece && !state.board[row][3].piece) {
-        castlingPartners.push({ row, col: 0 });
-      }
-    } 
-    else if (piece.type === PieceType.ROOK && (position.col === 0 || position.col === 7)) {
-      const king = state.board[row][4].piece;
-      if (king && king.type === PieceType.KING && !king.hasMoved) {
-        if (position.col === 7 && !state.board[row][5].piece && !state.board[row][6].piece) {
-          castlingPartners.push({ row, col: 4 });
-        } else if (position.col === 0 && !state.board[row][1].piece && 
-                  !state.board[row][2].piece && !state.board[row][3].piece) {
-          castlingPartners.push({ row, col: 4 });
-        }
-      }
-    }
-  
-    return castlingPartners;
-  };
-
   const handleSquarePress = useCallback(
     (position: Position) => {
-
-      
       const state = gameEngine.getState();
       
-      // Prevent moves if game is over
       if (state.isCheckmate || gameOver || timeoutWinner) {
-    
         return;
       }
 
-      // Prevent moves if waiting for coin toss or dice roll
       if (gameType === 'coinToss' && state.waitingForCoinToss) {
-        
         return;
       }
       if (gameType === 'dice' && (state.waitingForDiceRoll || state.remainingMoves <= 0)) {
-      
         return;
       }
 
@@ -171,265 +125,286 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
 
       // Si une pièce est déjà sélectionnée
       if (state.selectedPiece) {
-
-        
-        // Clicking the same piece - deselect it
+        // Si on clique sur la même pièce, la désélectionner
         if (state.selectedPiece.row === position.row && state.selectedPiece.col === position.col) {
-        
           gameEngine.unselectPiece();
+          setCastlingPartner(null);
+          setCastlingInitiator(null);
           forceUpdate();
           return;
         }
 
-        // Try to move the selected piece
+        // Si on clique sur un partenaire de roque valide
+        if (castlingPartner && 
+            position.row === castlingPartner.row && 
+            position.col === castlingPartner.col &&
+            castlingInitiator) {
+          // Effectuer le roque
+          const isKing = state.board[castlingInitiator.row][castlingInitiator.col].piece?.type === PieceType.KING;
+          const kingPosition = isKing ? castlingInitiator : { row: position.row, col: 4 };
+          const newKingCol = position.col === 7 || castlingInitiator.col === 7 ? 6 : 2;
+          
+          const moveSuccessful = gameEngine.movePiece(
+            kingPosition,
+            { row: position.row, col: newKingCol }
+          );
+
+          if (moveSuccessful) {
+            const newState = gameEngine.getState();
+            if (newState.isCheckmate) {
+              setGameOver(true);
+              setGameEndReason('checkmate');
+              setCheckmateWinner(newState.currentTurn);
+            }
+            setCurrentPlayer(newState.currentTurn);
+          }
+
+          setCastlingPartner(null);
+          setCastlingInitiator(null);
+          forceUpdate();
+          return;
+        }
+
+        // Tenter un mouvement normal
         const moveSuccessful = gameEngine.movePiece(state.selectedPiece, position);
-    
         
         if (moveSuccessful) {
-          // Handle captures
+          // Gérer la capture normale
           if (targetPiece) {
-            const selectedPiece = state.board[state.selectedPiece.row][state.selectedPiece.col].piece;
-            if (selectedPiece) {
-              const setCapturedPieces =
-                selectedPiece.color === PlayerColor.WHITE
-                  ? setCapturedByWhite
-                  : setCapturedByBlack;
-              setCapturedPieces(prev => [...prev, { ...targetPiece }]);
+            if (state.selectedPiece) {
+              const movingPiece = state.board[state.selectedPiece.row][state.selectedPiece.col].piece;
+              if (movingPiece?.color === PlayerColor.WHITE) {
+                setCapturedByWhite(prev => [...prev, { ...targetPiece }]);
+              } else {
+                setCapturedByBlack(prev => [...prev, { ...targetPiece }]);
+              }
             }
           }
-          setCurrentPlayer(gameEngine.getState().currentTurn);
+          
+          // Gérer la capture en passant
+          const movingPiece = state.board[state.selectedPiece.row][state.selectedPiece.col].piece;
+          if (movingPiece?.type === PieceType.PAWN && 
+              state.selectedPiece && 
+              Math.abs(position.col - state.selectedPiece.col) === 1 && 
+              !targetPiece) {
+            const capturedPawnRow = state.selectedPiece.row;
+            const capturedPawn = state.board[capturedPawnRow][position.col].piece;
+            
+            if (capturedPawn) {
+              if (movingPiece.color === PlayerColor.WHITE) {
+                setCapturedByWhite(prev => [...prev, { ...capturedPawn }]);
+              } else {
+                setCapturedByBlack(prev => [...prev, { ...capturedPawn }]);
+              }
+            }
+          }
+
+          const newState = gameEngine.getState();
+          if (newState.isCheckmate) {
+            setGameOver(true);
+            setGameEndReason('checkmate');
+            setCheckmateWinner(newState.currentTurn);
+          }
+          setCurrentPlayer(newState.currentTurn);
+          setCastlingPartner(null);
+          setCastlingInitiator(null);
           forceUpdate();
           return;
         }
         
-        // If the move wasn't successful and we clicked another one of our pieces, select it instead
+        // Si le mouvement a échoué mais qu'on clique sur une pièce de même couleur
         if (targetPiece && targetPiece.color === state.currentTurn) {
-
           gameEngine.selectPiece(position);
+          // Vérifier les possibilités de roque pour la nouvelle pièce sélectionnée
+          if (gameType === 'dice') {
+            const diceEngine = gameEngine as DiceChessState;
+            const castlingPartners = diceEngine.getCastlingPartners(position);
+            setCastlingPartner(castlingPartners.length > 0 ? castlingPartners[0] : null);
+            setCastlingInitiator(castlingPartners.length > 0 ? position : null);
+          }
           forceUpdate();
           return;
         }
       } else {
-        // No piece is selected - try to select a piece
+        // Si aucune pièce n'est sélectionnée et qu'on clique sur une pièce valide
         if (targetPiece && targetPiece.color === state.currentTurn) {
-       
           gameEngine.selectPiece(position);
+          // Vérifier les possibilités de roque pour la pièce sélectionnée
+          if (gameType === 'dice') {
+            const diceEngine = gameEngine as DiceChessState;
+            const castlingPartners = diceEngine.getCastlingPartners(position);
+            setCastlingPartner(castlingPartners.length > 0 ? castlingPartners[0] : null);
+            setCastlingInitiator(castlingPartners.length > 0 ? position : null);
+          }
           forceUpdate();
         }
       }
     },
-    [gameEngine, gameOver, timeoutWinner, gameType, setCapturedByWhite, setCapturedByBlack, setCurrentPlayer, forceUpdate]
-);
+    [gameEngine, gameOver, timeoutWinner, gameType, castlingPartner, castlingInitiator, 
+     setCurrentPlayer, setCapturedByWhite, setCapturedByBlack, forceUpdate]
+  );
 
   const state = gameEngine.getState();
 
-  const getGameOverMessage = () => {
-    let winner;
-    if (gameEndReason === 'checkmate') {
-      winner = checkmateWinner;
-    } else if (gameEndReason === 'timeout') {
-      winner = timeoutWinner;
-    } else {
-      winner = timeoutWinner || checkmateWinner;
-    }
-    
-    const winnerText = winner === PlayerColor.WHITE ? "White" : "Black";
-    
-    switch (gameEndReason) {
-      case 'checkmate':
-        return `Checkmate! ${winnerText} has won the game!`;
-      case 'timeout':
-        return `Time's up! ${winnerText} wins by timeout!`;
-      case 'forfeit':
-        return `${winnerText} wins by forfeit!`;
-      default:
-        return "Game Over!";
-    }
-  };
-
-  const getModalTitle = () => {
-    switch (gameEndReason) {
-      case 'checkmate':
-        return "Checkmate!";
-      case 'timeout':
-        return "Time's Up!";
-      case 'forfeit':
-        return "Game Forfeited";
-      default:
-        return "Game Over";
-    }
-  };
-
- return (
-  <View style={styles.container}>
-    <View style={styles.mainContainer}>
-      <View style={styles.headerContainer}>
-        <View style={styles.buttonContainer}>
-          <Button onNewGame={handleNewGame} variant="primary" size="medium" />
-          <TouchableOpacity 
-            style={styles.menuButton}
-            onPress={onReturnToMenu}
-          >
-            <Text style={styles.menuButtonText}>Return to Menu</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <View style={styles.gameContainer}>
-        <View style={styles.topSection}>
-          <View style={styles.upperArea}>
-            <View style={styles.capturedPiecesArea}>
-              <Timer
-                key={`black-${timerKey}`}
-                color={PlayerColor.BLACK}
-                isActive={state.currentTurn === PlayerColor.BLACK && !state.isCheckmate && !timeoutWinner && !gameOver}
-                initialTime={INITIAL_TIME}
-                onTimeOut={handleTimeOut}
-              />
-              <CapturedPiecesDisplay
-                capturedPieces={capturedByBlack}
-                color={PlayerColor.BLACK}
-              />
-            </View>
-          </View>
-
-          {gameType === 'coinToss' && (
-            <View style={styles.gameControlsArea}>
-              <CoinTosser
-                onCoinToss={handleCoinToss}
-                isWaitingForToss={state.waitingForCoinToss}
-                currentPlayer={currentPlayer}
-              />
-            </View>
-          )}
-          
-          {gameType === 'dice' && (
-            <View style={styles.gameControlsArea}>
-              <DiceRoller
-                onDiceRoll={handleDiceRoll}
-                isWaitingForRoll={state.waitingForDiceRoll}
-                currentPlayer={currentPlayer}
-                remainingMoves={state.remainingMoves}
-              />
-            </View>
-          )}
-        </View>
-
-        <View style={styles.boardSection}>
-          <View style={styles.board}>
-            {state.board.map((row, rowIndex) => (
-              <View key={rowIndex} style={styles.row}>
-                {row.map((square, colIndex) => {
-                  const position = { row: rowIndex, col: colIndex };
-                  const isSelected = 
-                    state.selectedPiece?.row === rowIndex && 
-                    state.selectedPiece?.col === colIndex;
-                  const isValidMove = state.validMoves.some(
-                    move => move.row === rowIndex && move.col === colIndex
-                  );
-
-                  return (
-                    <Square
-                      key={`${rowIndex}-${colIndex}`}
-                      dark={(rowIndex + colIndex) % 2 === 1}
-                      piece={square.piece}
-                      position={position}
-                      onPress={handleSquarePress}
-                      selected={isSelected}
-                      isValidMove={isValidMove}
-                    />
-                  );
-                })}
-              </View>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.lowerArea}>
-          <View style={styles.capturedPiecesArea}>
-            <Timer
-              key={`white-${timerKey}`}
-              color={PlayerColor.WHITE}
-              isActive={state.currentTurn === PlayerColor.WHITE && !state.isCheckmate && !timeoutWinner && !gameOver}
-              initialTime={INITIAL_TIME}
-              onTimeOut={handleTimeOut}
-            />
-            <CapturedPiecesDisplay
-              capturedPieces={capturedByWhite}
-              color={PlayerColor.WHITE}
-            />
-          </View>
-        </View>
-
-        <View style={styles.turnIndicator}>
-          <Text style={styles.turnIndicatorText}>
-            {gameOver 
-              ? getGameOverMessage()
-              : `${state.currentTurn === PlayerColor.WHITE ? "White" : "Black"}'s turn`}
-          </Text>
-        </View>
-      </View>
-    </View>
-
-    {/* Game Over Modal */}
-    <Modal
-      visible={gameOver}
-      transparent={true}
-      animationType="fade"
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>{getModalTitle()}</Text>
-          <Text style={styles.modalText}>{getGameOverMessage()}</Text>
-          <View style={styles.modalButtons}>
-            <TouchableOpacity
-              style={[styles.modalButton, styles.confirmButton]}
-              onPress={confirmNewGame}
-            >
-              <Text style={styles.buttonText}>New Game</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modalButton, styles.cancelButton]}
+  return (
+    <View style={styles.container}>
+      <View style={styles.mainContainer}>
+        <View style={styles.headerContainer}>
+          <View style={styles.buttonContainer}>
+            <Button onNewGame={handleNewGame} variant="primary" size="medium" />
+            <TouchableOpacity 
+              style={styles.menuButton}
               onPress={onReturnToMenu}
             >
-              <Text style={styles.buttonText}>Return to Menu</Text>
+              <Text style={styles.menuButtonText}>Return to Menu</Text>
             </TouchableOpacity>
           </View>
         </View>
-      </View>
-    </Modal>
-
-    {/* New Game Confirmation Modal */}
-    <Modal
-      visible={showConfirmDialog && !gameOver}
-      transparent={true}
-      animationType="fade"
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>New Game</Text>
-          <Text style={styles.modalText}>
-            Do you want to forfeit the current game and start a new one?
-          </Text>
-          <View style={styles.modalButtons}>
-            <TouchableOpacity
-              style={[styles.modalButton, styles.cancelButton]}
-              onPress={() => setShowConfirmDialog(false)}
-            >
-              <Text style={styles.buttonText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modalButton, styles.confirmButton]}
-              onPress={handleForfeit}
-            >
-              <Text style={styles.buttonText}>Forfeit</Text>
-            </TouchableOpacity>
+  
+        <View style={styles.gameContainer}>
+          <View style={styles.topSection}>
+            <View style={styles.upperArea}>
+            <View style={styles.capturedPiecesArea}>
+  <CapturedPiecesDisplay
+    capturedPieces={capturedByBlack}
+    color={PlayerColor.BLACK}
+  />
+  <Timer
+    key={`black-${timerKey}`}
+    color={PlayerColor.BLACK}
+    isActive={state.currentTurn === PlayerColor.BLACK && !state.isCheckmate && !timeoutWinner && !gameOver}
+    initialTime={INITIAL_TIME}
+    onTimeOut={handleTimeOut}
+  />
+</View>
+            </View>
+  
+            {gameType === 'coinToss' && (
+              <View style={styles.gameControlsArea}>
+                <CoinTosser
+                  onCoinToss={handleCoinToss}
+                  isWaitingForToss={state.waitingForCoinToss}
+                  currentPlayer={currentPlayer}
+                />
+              </View>
+            )}
+            
+            {gameType === 'dice' && (
+              <View style={styles.gameControlsArea}>
+                <DiceRoller
+                  onDiceRoll={handleDiceRoll}
+                  isWaitingForRoll={state.waitingForDiceRoll}
+                  currentPlayer={currentPlayer}
+                  remainingMoves={state.remainingMoves}
+                />
+              </View>
+            )}
+          </View>
+  
+          <View style={styles.boardSection}>
+            <View style={styles.board}>
+              {state.board.map((row, rowIndex) => (
+                <View key={rowIndex} style={styles.row}>
+                  {row.map((square, colIndex) => {
+                    const position = { row: rowIndex, col: colIndex };
+                    const piece = square.piece;
+                    
+                    const isKingInCheck = 
+                      piece?.type === PieceType.KING &&
+                      piece?.color === state.currentTurn &&
+                      state.isInCheck != null &&
+                      state.isInCheck === piece.color;
+  
+                    const isCastlingPartner = castlingPartner &&
+                      rowIndex === castlingPartner.row &&
+                      colIndex === castlingPartner.col;
+  
+                    return (
+                      <Square
+                        key={`${rowIndex}-${colIndex}`}
+                        dark={(rowIndex + colIndex) % 2 === 1}
+                        piece={piece}
+                        position={position}
+                        onPress={handleSquarePress}
+                        selected={state.selectedPiece?.row === rowIndex && state.selectedPiece?.col === colIndex}
+                        isValidMove={state.validMoves.some(move => move.row === rowIndex && move.col === colIndex)}
+                        isKingInCheck={isKingInCheck}
+                        isCastlingPartner={isCastlingPartner}
+                      />
+                    );
+                  })}
+                </View>
+              ))}
+            </View>
+          </View>
+  
+          <View style={styles.lowerArea}>
+          <View style={styles.capturedPiecesArea}>
+  <CapturedPiecesDisplay
+    capturedPieces={capturedByWhite}
+    color={PlayerColor.WHITE}
+  />
+  <Timer
+    key={`white-${timerKey}`}
+    color={PlayerColor.WHITE}
+    isActive={state.currentTurn === PlayerColor.WHITE && !state.isCheckmate && !timeoutWinner && !gameOver}
+    initialTime={INITIAL_TIME}
+    onTimeOut={handleTimeOut}
+  />
+</View>
+          </View>
+  
+          <View style={styles.turnIndicator}>
+            <Text style={styles.turnIndicatorText}>
+              {state.isInCheck 
+                ? `${state.currentTurn === PlayerColor.WHITE ? "White" : "Black"}'s king is in check!`
+                : state.currentTurn === PlayerColor.WHITE 
+                  ? "White's turn" 
+                  : "Black's turn"}
+            </Text>
           </View>
         </View>
       </View>
-    </Modal>
-  </View>
-);}
+  
+      <GameOverModal
+        isVisible={gameOver}
+        winner={checkmateWinner || timeoutWinner}
+        gameOverReason={gameEndReason}
+        onNewGame={confirmNewGame}
+        onReturnToMenu={onReturnToMenu}
+      />
+  
+      <Modal
+        visible={showConfirmDialog && !gameOver}
+        transparent={true}
+        animationType="fade"
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>New Game</Text>
+            <Text style={styles.modalText}>
+              Do you want to forfeit the current game and start a new one?
+            </Text>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setShowConfirmDialog(false)}
+              >
+                <Text style={styles.buttonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.confirmButton]}
+                onPress={handleForfeit}
+              >
+                <Text style={styles.buttonText}>Forfeit</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -481,7 +456,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   gameControlsArea: {
-    width: 60,  // Adjusted for the coin tosser size
+    width: 60,
     alignItems: 'center',
     marginRight: 10,
   },
@@ -512,86 +487,86 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     overflow: 'hidden',
     ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 5,
-      },
+        ios: {
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.25,
+            shadowRadius: 4,
+        },
+        android: {
+            elevation: 5,
+        },
     }),
-  },
-  row: {
+},
+row: {
     flex: 1,
     flexDirection: 'row',
-  },
-  lowerArea: {
+},
+lowerArea: {
     width: '100%',
     alignItems: 'center',
     marginTop: 5,
-  },
-  turnIndicator: {
+},
+turnIndicator: {
     marginTop: 15,
     alignItems: 'center',
-  },
-  turnIndicatorText: {
+},
+turnIndicatorText: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
-  },
+},
 modalOverlay: {
-flex: 1,
-backgroundColor: 'rgba(0, 0, 0, 0.7)',
-justifyContent: 'center',
-alignItems: 'center',
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
 },
 modalContent: {
-backgroundColor: 'white',
-borderRadius: 12,
-padding: 24,
-width: '80%',
-maxWidth: 400,
-alignItems: 'center',
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 24,
+    width: '80%',
+    maxWidth: 400,
+    alignItems: 'center',
 },
 modalTitle: {
-fontSize: 24,
-fontWeight: 'bold',
-marginBottom: 16,
-color: '#333',
-textAlign: 'center',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    color: '#333',
+    textAlign: 'center',
 },
 modalText: {
-fontSize: 18,
-marginBottom: 24,
-color: '#666',
-textAlign: 'center',
-lineHeight: 24,
+    fontSize: 18,
+    marginBottom: 24,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 24,
 },
 modalButtons: {
-flexDirection: 'row',
-justifyContent: 'space-around',
-width: '100%',
-columnGap: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+    columnGap: 10,
 },
 modalButton: {
-paddingVertical: 12,
-paddingHorizontal: 24,
-borderRadius: 8,
-minWidth: 120,
-alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    minWidth: 120,
+    alignItems: 'center',
 },
 confirmButton: {
-backgroundColor: '#2196F3',
+    backgroundColor: '#4CAF50', // Vert
 },
 cancelButton: {
-backgroundColor: '#757575',
+    backgroundColor: '#757575', // Gris
 },
 buttonText: {
-color: 'white',
-fontSize: 16,
-fontWeight: 'bold',
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
 },
 });
 

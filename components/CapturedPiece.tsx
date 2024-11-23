@@ -1,26 +1,27 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { PlayerColor, Piece, PieceType } from '../types/Chess';
+import { View, Text, StyleSheet, Platform } from 'react-native';
+import { PlayerColor, Piece } from '../types/Chess';
 
 interface CapturedPiecesDisplayProps {
   capturedPieces: Piece[];
   color: PlayerColor;
 }
 
-const getPieceSymbol = (type: PieceType): string => {
-  switch (type) {
-    case PieceType.PAWN:
-      return '♟';
-    case PieceType.ROOK:
-      return '♜';
-    case PieceType.KNIGHT:
-      return '♞';
-    case PieceType.BISHOP:
-      return '♝';
-    case PieceType.QUEEN:
-      return '♛';
-    case PieceType.KING:
-      return '♚';
+const getPieceSymbol = (piece: Piece): string => {
+  const isWhite = piece.color === PlayerColor.WHITE;
+  switch (piece.type) {
+    case 'PAWN':
+      return isWhite ? '♙' : '♟';
+    case 'ROOK':
+      return isWhite ? '♖' : '♜';
+    case 'KNIGHT':
+      return isWhite ? '♘' : '♞';
+    case 'BISHOP':
+      return isWhite ? '♗' : '♝';
+    case 'QUEEN':
+      return isWhite ? '♕' : '♛';
+    case 'KING':
+      return isWhite ? '♔' : '♚';
     default:
       return '';
   }
@@ -38,13 +39,13 @@ const CapturedPiecesDisplay: React.FC<CapturedPiecesDisplayProps> = ({
       <View style={styles.piecesContainer}>
         {capturedPieces.map((piece, index) => (
           <Text 
-            key={index} 
+            key={`${piece.type}-${piece.color}-${index}`}
             style={[
               styles.piece,
-              { color: piece.color === PlayerColor.WHITE ? '#fff' : '#000' }
+              { color: piece.color === PlayerColor.WHITE ? '#FFFFFF' : '#000000' }
             ]}
           >
-            {getPieceSymbol(piece.type)}
+            {getPieceSymbol(piece)}
           </Text>
         ))}
       </View>
@@ -54,16 +55,16 @@ const CapturedPiecesDisplay: React.FC<CapturedPiecesDisplayProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    width: '100%',
     padding: 8,
-    borderRadius: 8,
-    marginBottom: 8,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 4,
+    minHeight: 60,
   },
   header: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#333',
     marginBottom: 4,
+    color: '#333',
   },
   piecesContainer: {
     flexDirection: 'row',
@@ -72,9 +73,21 @@ const styles = StyleSheet.create({
   },
   piece: {
     fontSize: 24,
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
+    ...Platform.select({
+      ios: {
+        textShadowColor: 'rgba(0, 0, 0, 0.5)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 1,
+      },
+      android: {
+        textShadowColor: 'rgba(0, 0, 0, 0.5)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 1,
+      },
+      web: {
+        textShadow: '0px 1px 1px rgba(0, 0, 0, 0.5)',
+      },
+    }),
   },
 });
 
