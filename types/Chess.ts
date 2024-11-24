@@ -1,4 +1,4 @@
-export type GameEndReason = 'checkmate' | 'timeout' | 'forfeit' | null;
+export type GameEndReason = 'checkmate' | 'timeout' | 'forfeit' | 'stalemate' | null;
 
 export enum PlayerColor {
     WHITE = 'WHITE',
@@ -38,6 +38,10 @@ export type LastMove = {
     from: Position;
     to: Position;
     piece: Piece;
+    isCastling?: boolean;
+    isEnPassant?: boolean;
+    capturedPiece?: Piece | null;
+    isPromotion?: boolean; 
 };
 
 export type GameType = 'coinToss' | 'dice';
@@ -50,6 +54,7 @@ export interface GameState {
     blockedMoves: ValidMoves;
     isInCheck: PlayerColor | null;
     isCheckmate: PlayerColor | null;
+    isStalemate: boolean;
     gameOver: boolean;
     winner: PlayerColor | null;
     gameOverReason: GameEndReason;
@@ -58,4 +63,6 @@ export interface GameState {
     remainingMoves: number;
     waitingForCoinToss: boolean;
     waitingForDiceRoll: boolean;
-}
+    capturedByWhite: Piece[];
+    capturedByBlack: Piece[];
+  }

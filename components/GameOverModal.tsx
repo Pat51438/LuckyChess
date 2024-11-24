@@ -1,10 +1,10 @@
+// Dans GameOverModal.tsx
+
 import React from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { PlayerColor } from '../types/Chess';
+import { PlayerColor, GameEndReason } from '../types/Chess';  // Import depuis types/Chess
 
-export type GameEndReason = 'checkmate' | 'timeout' | 'forfeit' | null;
-
-interface GameOverModalProps {
+export interface GameOverModalProps {
   isVisible: boolean;
   winner: PlayerColor | null;
   gameOverReason: GameEndReason;
@@ -12,40 +12,24 @@ interface GameOverModalProps {
   onReturnToMenu: () => void;
 }
 
+
 const GameOverModal: React.FC<GameOverModalProps> = ({
   isVisible,
   winner,
   gameOverReason,
   onNewGame,
-  onReturnToMenu
+  onReturnToMenu,
 }) => {
-  const getGameOverMessage = () => {
-    if (!gameOverReason || !winner) return "Game Over!";
-    
-    const winnerText = winner === PlayerColor.WHITE ? "White" : "Black";
-    
+  const getMessage = () => {
     switch (gameOverReason) {
       case 'checkmate':
-        return `Checkmate! ${winnerText} wins by checkmate!`;
+        return `${winner === PlayerColor.WHITE ? 'White' : 'Black'} wins by checkmate!`;
       case 'timeout':
-        return `Time's up! ${winnerText} wins by timeout!`;
+        return `${winner === PlayerColor.WHITE ? 'White' : 'Black'} wins by timeout!`;
       case 'forfeit':
-        return `${winnerText} wins by forfeit!`;
-      default:
-        return "Game Over!";
-    }
-  };
-
-  const getModalTitle = () => {
-    if (!gameOverReason) return "Game Over";
-    
-    switch (gameOverReason) {
-      case 'checkmate':
-        return "Checkmate!";
-      case 'timeout':
-        return "Time's Up!";
-      case 'forfeit':
-        return "Game Forfeited";
+        return `${winner === PlayerColor.WHITE ? 'White' : 'Black'} wins by forfeit!`;
+      case 'stalemate':
+        return "Game is a draw by stalemate!";
       default:
         return "Game Over";
     }
@@ -59,19 +43,17 @@ const GameOverModal: React.FC<GameOverModalProps> = ({
     >
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>{getModalTitle()}</Text>
-          <Text style={styles.modalMessage}>{getGameOverMessage()}</Text>
-          
-          <View style={styles.buttonsContainer}>
-            <TouchableOpacity
-              style={[styles.button, styles.newGameButton]}
+          <Text style={styles.modalTitle}>Game Over</Text>
+          <Text style={styles.modalText}>{getMessage()}</Text>
+          <View style={styles.modalButtons}>
+            <TouchableOpacity 
+              style={[styles.modalButton, styles.newGameButton]}
               onPress={onNewGame}
             >
               <Text style={styles.buttonText}>New Game</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[styles.button, styles.menuButton]}
+            <TouchableOpacity 
+              style={[styles.modalButton, styles.menuButton]}
               onPress={onReturnToMenu}
             >
               <Text style={styles.buttonText}>Return to Menu</Text>
@@ -101,24 +83,22 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
     marginBottom: 16,
-    textAlign: 'center',
+    color: '#333',
   },
-  modalMessage: {
+  modalText: {
     fontSize: 18,
-    color: '#666',
     marginBottom: 24,
+    color: '#666',
     textAlign: 'center',
-    lineHeight: 24,
   },
-  buttonsContainer: {
+  modalButtons: {
     flexDirection: 'row',
-    gap: 12,
-    justifyContent: 'center',
+    justifyContent: 'space-around',
     width: '100%',
+    gap: 10,
   },
-  button: {
+  modalButton: {
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 8,
@@ -126,10 +106,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   newGameButton: {
-    backgroundColor: '#4CAF50',  // Vert
+    backgroundColor: '#4CAF50',
   },
   menuButton: {
-    backgroundColor: '#757575',  // Gris
+    backgroundColor: '#757575',
   },
   buttonText: {
     color: 'white',

@@ -7,12 +7,11 @@ import CapturedPiecesDisplay from "./CapturedPiece";
 import CoinTosser from "./CoinTosser";
 import DiceRoller from "./DiceRoller";
 import GameOverModal from "./GameOverModal";
-import { PlayerColor, Position, PieceType, Piece, GameType } from "../types/Chess";
+import { PlayerColor, Position, PieceType, Piece, GameType, GameEndReason } from "../types/Chess";  // Ajout de GameEndReason ici
 import { CoinTossChessState } from "../gameLogic/CoinTossGameState";
 import { DiceChessState } from "../gameLogic/DiceGameState";
 import { DiceRoll } from "../types/DiceGame";
 import { CoinToss } from "../types/CoinTossGame";
-import { GameEndReason } from "./GameOverModal";
 
 const INITIAL_TIME = 600; // 10 minutes in seconds
 
@@ -42,6 +41,8 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
   const [lastCoinToss, setLastCoinToss] = useState<CoinToss | null>(null);
   const [castlingPartner, setCastlingPartner] = useState<Position | null>(null);
   const [castlingInitiator, setCastlingInitiator] = useState<Position | null>(null);
+  const [hasWhiteMoved, setHasWhiteMoved] = useState(false);
+  const [gameKey, setGameKey] = useState(0);
 
   const forceUpdate = useCallback(() => {
     setUpdateTrigger((prev) => prev + 1);
@@ -101,6 +102,8 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
     setLastCoinToss(null);
     setCastlingPartner(null);
     setCastlingInitiator(null);
+    setHasWhiteMoved(false);
+    setGameKey(prev => prev + 1);
     forceUpdate();
     setShowConfirmDialog(false);
   }, [gameEngine, forceUpdate]);
@@ -136,46 +139,59 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
 
         // Si on clique sur un partenaire de roque valide
         if (castlingPartner && 
-            position.row === castlingPartner.row && 
-            position.col === castlingPartner.col &&
-            castlingInitiator) {
-          // Effectuer le roque
-          const isKing = state.board[castlingInitiator.row][castlingInitiator.col].piece?.type === PieceType.KING;
-          const kingPosition = isKing ? castlingInitiator : { row: position.row, col: 4 };
-          const newKingCol = position.col === 7 || castlingInitiator.col === 7 ? 6 : 2;
+          position.row === castlingPartner.row && 
+          position.col === castlingPartner.col &&
+          castlingInitiator) {
           
-          const moveSuccessful = gameEngine.movePiece(
-            kingPosition,
-            { row: position.row, col: newKingCol }
-          );
-
-          if (moveSuccessful) {
-            const newState = gameEngine.getState();
-            if (newState.isCheckmate) {
-              setGameOver(true);
-              setGameEndReason('checkmate');
-              setCheckmateWinner(newState.currentTurn);
-            }
-            setCurrentPlayer(newState.currentTurn);
+          let kingPos: Position;
+          let rookPos: Position;
+          const selectedPiece = state.board[castlingInitiator.row][castlingInitiator.col].piece;
+          
+          // Détermine quelle pièce est le roi et quelle pièce est la tour
+          if (selectedPiece?.type === PieceType.KING) {
+            kingPos = castlingInitiator;
+            rookPos = position; // La position cliquée est la tour
+          } else {
+            kingPos = position; // La position cliquée est le roi
+            rookPos = castlingInitiator; // La position initiale est la tour
           }
-
+        
+          if (gameEngine instanceof DiceChessState) {
+            const success = gameEngine.performCastling(kingPos, rookPos);
+            
+            if (success) {
+              const newState = gameEngine.getState();
+              if (newState.isCheckmate) {
+                setGameOver(true);
+                setGameEndReason('checkmate');
+                setCheckmateWinner(newState.currentTurn);
+              }
+              setCurrentPlayer(newState.currentTurn);
+            }
+          }
+          
           setCastlingPartner(null);
           setCastlingInitiator(null);
           forceUpdate();
           return;
         }
-
         // Tenter un mouvement normal
         const moveSuccessful = gameEngine.movePiece(state.selectedPiece, position);
         
         if (moveSuccessful) {
+          // Si c'est le premier mouvement des blancs
+          if (!hasWhiteMoved && state.currentTurn === PlayerColor.WHITE) {
+            setHasWhiteMoved(true);
+          }
+
           // Gérer la capture normale
           if (targetPiece) {
             if (state.selectedPiece) {
-              const movingPiece = state.board[state.selectedPiece.row][state.selectedPiece.col].piece;
-              if (movingPiece?.color === PlayerColor.WHITE) {
+              // Si la pièce capturée est noire, elle va dans les captures blanches
+              if (targetPiece.color === PlayerColor.BLACK) {
                 setCapturedByWhite(prev => [...prev, { ...targetPiece }]);
               } else {
+                // Si la pièce capturée est blanche, elle va dans les captures noires
                 setCapturedByBlack(prev => [...prev, { ...targetPiece }]);
               }
             }
@@ -191,7 +207,8 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
             const capturedPawn = state.board[capturedPawnRow][position.col].piece;
             
             if (capturedPawn) {
-              if (movingPiece.color === PlayerColor.WHITE) {
+              // Même logique pour la capture en passant
+              if (capturedPawn.color === PlayerColor.BLACK) {
                 setCapturedByWhite(prev => [...prev, { ...capturedPawn }]);
               } else {
                 setCapturedByBlack(prev => [...prev, { ...capturedPawn }]);
@@ -200,6 +217,8 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
           }
 
           const newState = gameEngine.getState();
+          setCapturedByWhite(newState.capturedByWhite);
+          setCapturedByBlack(newState.capturedByBlack);
           if (newState.isCheckmate) {
             setGameOver(true);
             setGameEndReason('checkmate');
@@ -241,7 +260,7 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
       }
     },
     [gameEngine, gameOver, timeoutWinner, gameType, castlingPartner, castlingInitiator, 
-     setCurrentPlayer, setCapturedByWhite, setCapturedByBlack, forceUpdate]
+      setCurrentPlayer, setCapturedByWhite, setCapturedByBlack, hasWhiteMoved, forceUpdate]
   );
 
   const state = gameEngine.getState();
@@ -264,19 +283,19 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
         <View style={styles.gameContainer}>
           <View style={styles.topSection}>
             <View style={styles.upperArea}>
-            <View style={styles.capturedPiecesArea}>
-  <CapturedPiecesDisplay
-    capturedPieces={capturedByBlack}
-    color={PlayerColor.BLACK}
-  />
-  <Timer
-    key={`black-${timerKey}`}
-    color={PlayerColor.BLACK}
-    isActive={state.currentTurn === PlayerColor.BLACK && !state.isCheckmate && !timeoutWinner && !gameOver}
-    initialTime={INITIAL_TIME}
-    onTimeOut={handleTimeOut}
-  />
-</View>
+              <View style={styles.capturedPiecesArea}>
+                <CapturedPiecesDisplay
+                  capturedPieces={capturedByBlack}
+                  color={PlayerColor.BLACK}
+                />
+                <Timer
+                  key={`black-${timerKey}`}
+                  color={PlayerColor.BLACK}
+                  isActive={state.currentTurn === PlayerColor.BLACK && !state.isCheckmate && !timeoutWinner && !gameOver}
+                  initialTime={INITIAL_TIME}
+                  onTimeOut={handleTimeOut}
+                />
+              </View>
             </View>
   
             {gameType === 'coinToss' && (
@@ -296,6 +315,7 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
                   isWaitingForRoll={state.waitingForDiceRoll}
                   currentPlayer={currentPlayer}
                   remainingMoves={state.remainingMoves}
+                  gameKey={gameKey}
                 />
               </View>
             )}
@@ -339,19 +359,19 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
           </View>
   
           <View style={styles.lowerArea}>
-          <View style={styles.capturedPiecesArea}>
-  <CapturedPiecesDisplay
-    capturedPieces={capturedByWhite}
-    color={PlayerColor.WHITE}
-  />
-  <Timer
-    key={`white-${timerKey}`}
-    color={PlayerColor.WHITE}
-    isActive={state.currentTurn === PlayerColor.WHITE && !state.isCheckmate && !timeoutWinner && !gameOver}
-    initialTime={INITIAL_TIME}
-    onTimeOut={handleTimeOut}
-  />
-</View>
+            <View style={styles.capturedPiecesArea}>
+              <CapturedPiecesDisplay
+                capturedPieces={capturedByWhite}
+                color={PlayerColor.WHITE}
+              />
+              <Timer
+                key={`white-${timerKey}`}
+                color={PlayerColor.WHITE}
+                isActive={hasWhiteMoved && state.currentTurn === PlayerColor.WHITE && !state.isCheckmate && !timeoutWinner && !gameOver}
+                initialTime={INITIAL_TIME}
+                onTimeOut={handleTimeOut}
+              />
+            </View>
           </View>
   
           <View style={styles.turnIndicator}>
@@ -487,87 +507,87 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     overflow: 'hidden',
     ...Platform.select({
-        ios: {
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.25,
-            shadowRadius: 4,
-        },
-        android: {
-            elevation: 5,
-        },
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 5,
+      },
     }),
-},
-row: {
+  },
+  row: {
     flex: 1,
     flexDirection: 'row',
-},
-lowerArea: {
+  },
+  lowerArea: {
     width: '100%',
     alignItems: 'center',
     marginTop: 5,
-},
-turnIndicator: {
+  },
+  turnIndicator: {
     marginTop: 15,
     alignItems: 'center',
-},
-turnIndicatorText: {
+  },
+  turnIndicatorText: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
-},
-modalOverlay: {
+  },
+  modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
-},
-modalContent: {
+  },
+  modalContent: {
     backgroundColor: 'white',
     borderRadius: 12,
     padding: 24,
     width: '80%',
     maxWidth: 400,
     alignItems: 'center',
-},
-modalTitle: {
+  },
+  modalTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 16,
     color: '#333',
     textAlign: 'center',
-},
-modalText: {
+  },
+  modalText: {
     fontSize: 18,
     marginBottom: 24,
     color: '#666',
     textAlign: 'center',
     lineHeight: 24,
-},
-modalButtons: {
+  },
+  modalButtons: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     width: '100%',
     columnGap: 10,
-},
-modalButton: {
+  },
+  modalButton: {
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 8,
     minWidth: 120,
     alignItems: 'center',
-},
-confirmButton: {
-    backgroundColor: '#4CAF50', // Vert
-},
-cancelButton: {
-    backgroundColor: '#757575', // Gris
-},
-buttonText: {
+  },
+  confirmButton: {
+    backgroundColor: '#4CAF50',
+  },
+  cancelButton: {
+    backgroundColor: '#757575',
+  },
+  buttonText: {
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
-},
+  },
 });
 
 export default Board;

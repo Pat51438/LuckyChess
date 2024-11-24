@@ -33,9 +33,6 @@ const CapturedPiecesDisplay: React.FC<CapturedPiecesDisplayProps> = ({
 }) => {
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>
-        {color === PlayerColor.WHITE ? "White's captures" : "Black's captures"}
-      </Text>
       <View style={styles.piecesContainer}>
         {capturedPieces.map((piece, index) => (
           <Text 

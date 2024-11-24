@@ -8,11 +8,10 @@ import {
   GameState,
   ValidMoves,
   LastMove,
-  GameType
+  GameType,
+  GameEndReason  // Importez le type depuis Chess.ts
 } from '../types/Chess';
 import { DiceRoll } from '../types/DiceGame';
-
-type GameEndReason = 'checkmate' | 'timeout' | 'forfeit' | null;
 
 export class DiceChessState {
   private board: Board;
@@ -31,7 +30,11 @@ export class DiceChessState {
   private validDefendingMoves: Array<{from: Position, to: Position}>;
   private gameOver: boolean;
   private winner: PlayerColor | null;
-  private gameOverReason: GameEndReason;
+  private gameOverReason: GameEndReason;  // Utilisez le type importé
+  private isStalemate: boolean = false;
+  private capturedByWhite: Piece[] = [];
+  private capturedByBlack: Piece[] = []; 
+  
 
   constructor() {
     this.board = this.createInitialBoard();
@@ -41,6 +44,7 @@ export class DiceChessState {
     this.blockedMoves = [];
     this.isInCheck = null;
     this.isCheckmate = null;
+    
     this.lastMove = null;
     this.waitingForDiceRoll = false;
     this.remainingMoves = 1;
@@ -113,12 +117,22 @@ export class DiceChessState {
     throw new Error(`King not found for color: ${color}`);
   }
 
-  private isSquareUnderAttack(position: Position, byColor: PlayerColor, board: Board = this.board): boolean {
+  private isSquareUnderAttack(position: Position, byColor: PlayerColor, board: Board = this.board, skipKing: boolean = false): boolean {
     for (let row = 0; row < 8; row++) {
       for (let col = 0; col < 8; col++) {
         const piece = board[row][col].piece;
         if (piece && piece.color === byColor) {
-          const moves = this.calculateRawMovesByPieceType({ row, col }, piece.type, board);
+          if (skipKing && piece.type === PieceType.KING) {
+            continue;
+          }
+          
+          const moves = this.calculateRawMovesByPieceType(
+            { row, col }, 
+            piece.type, 
+            board,
+            true
+          );
+          
           if (moves.some(move => move.row === position.row && move.col === position.col)) {
             return true;
           }
@@ -175,6 +189,32 @@ export class DiceChessState {
     }
   }
 
+  private isStaleCheckForPlayer(color: PlayerColor): boolean {
+    // Vérifie si le joueur n'est pas en échec
+    const kingPos = this.findKingPosition(color, this.board);
+    const opponentColor = color === PlayerColor.WHITE ? PlayerColor.BLACK : PlayerColor.WHITE;
+    
+    if (this.isSquareUnderAttack(kingPos, opponentColor, this.board)) {
+      return false;  // Si le roi est en échec, ce n'est pas un pat
+    }
+  
+    // Vérifie si le joueur a des mouvements légaux disponibles
+    for (let row = 0; row < 8; row++) {
+      for (let col = 0; col < 8; col++) {
+        const piece = this.board[row][col].piece;
+        if (piece && piece.color === color) {
+          const moves = this.getValidMovesForPiece({ row, col });
+          if (moves.length > 0) {
+            return false;  // Si un mouvement est possible, ce n'est pas un pat
+          }
+        }
+      }
+    }
+  
+    // Si aucun mouvement n'est possible et le roi n'est pas en échec, c'est un pat
+    return true;
+  }
+
   private findDefendingMoves(): void {
     this.validDefendingMoves = [];
     
@@ -216,135 +256,163 @@ export class DiceChessState {
     }
   }
 
+  
+
   private isCastlingPossible(kingPos: Position, rookPos: Position): boolean {
     const king = this.board[kingPos.row][kingPos.col].piece;
     const rook = this.board[rookPos.row][rookPos.col].piece;
   
-    // Vérifie si le roi et la tour sont bien présents et n'ont pas bougé
     if (!king || king.type !== PieceType.KING || king.hasMoved || 
         !rook || rook.type !== PieceType.ROOK || rook.hasMoved) {
       return false;
     }
   
-    // Vérifie si le roi est en échec - pas de roque possible si en échec
-    if (this.isInCheck === king.color) {
+    const opponentColor = king.color === PlayerColor.WHITE ? PlayerColor.BLACK : PlayerColor.WHITE;
+    
+    if (this.isSquareUnderAttack(kingPos, opponentColor, this.board, true)) {
       return false;
     }
-
-    const opponentColor = king.color === PlayerColor.WHITE ? PlayerColor.BLACK : PlayerColor.WHITE;
   
-    // Petit roque (côté roi)
-    if (rookPos.col === 7) {
-      // Vérifie si les cases entre le roi et la tour sont libres
-      if (this.board[kingPos.row][5].piece || this.board[kingPos.row][6].piece) {
-        return false;
-      }
-      // Vérifie si les cases que le roi traverse ne sont pas menacées
-      if (this.isSquareUnderAttack({ row: kingPos.row, col: 4 }, opponentColor) ||
-          this.isSquareUnderAttack({ row: kingPos.row, col: 5 }, opponentColor) ||
-          this.isSquareUnderAttack({ row: kingPos.row, col: 6 }, opponentColor)) {
-        return false;
-      }
-    }
-    // Grand roque (côté reine)
-    else if (rookPos.col === 0) {
-      // Vérifie si les cases entre le roi et la tour sont libres
-      if (this.board[kingPos.row][1].piece || 
-          this.board[kingPos.row][2].piece || 
-          this.board[kingPos.row][3].piece) {
-        return false;
-      }
-      // Vérifie si les cases que le roi traverse ne sont pas menacées
-      if (this.isSquareUnderAttack({ row: kingPos.row, col: 4 }, opponentColor) ||
-          this.isSquareUnderAttack({ row: kingPos.row, col: 3 }, opponentColor) ||
-          this.isSquareUnderAttack({ row: kingPos.row, col: 2 }, opponentColor)) {
-        return false;
-      }
-    }
+    const isSideEmpty = rookPos.col === 7 
+      ? !this.board[kingPos.row][5].piece && !this.board[kingPos.row][6].piece
+      : !this.board[kingPos.row][1].piece && !this.board[kingPos.row][2].piece && !this.board[kingPos.row][3].piece;
   
-    return true;
-}
-
-private isEnPassantPossible(from: Position, to: Position): boolean {
-  const piece = this.board[from.row][from.col].piece;
-  if (!piece || piece.type !== PieceType.PAWN) return false;
+    if (!isSideEmpty) return false;
   
-  // Vérifie si c'est un mouvement diagonal
-  if (Math.abs(to.col - from.col) !== 1) return false;
+    const colsToCheck = rookPos.col === 7 
+      ? [5, 6]
+      : [2, 3];
   
-  // Doit avoir un dernier mouvement
-  if (!this.lastMove) return false;
-
-  const lastPiece = this.lastMove.piece;
-  
-  // Pour les blancs (qui montent)
-  if (piece.color === PlayerColor.WHITE) {
-      return (
-          from.row === 3 && // Le pion blanc doit être sur la 5e rangée
-          to.row === 2 && // Doit monter d'une rangée
-          lastPiece.type === PieceType.PAWN &&
-          lastPiece.color === PlayerColor.BLACK &&
-          this.lastMove.from.row === 1 &&
-          this.lastMove.to.row === 3 &&
-          this.lastMove.to.col === to.col &&
-          // Vérifie que le pion à capturer est toujours là
-          this.board[from.row][to.col].piece?.type === PieceType.PAWN &&
-          this.board[from.row][to.col].piece?.color === PlayerColor.BLACK
-      );
-  } 
-  // Pour les noirs (qui descendent)
-  else {
-      return (
-          from.row === 4 && // Le pion noir doit être sur la 4e rangée
-          to.row === 5 && // Doit descendre d'une rangée
-          lastPiece.type === PieceType.PAWN &&
-          lastPiece.color === PlayerColor.WHITE &&
-          this.lastMove.from.row === 6 &&
-          this.lastMove.to.row === 4 &&
-          this.lastMove.to.col === to.col &&
-          // Vérifie que le pion à capturer est toujours là
-          this.board[from.row][to.col].piece?.type === PieceType.PAWN &&
-          this.board[from.row][to.col].piece?.color === PlayerColor.WHITE
-      );
+    return !colsToCheck.some(col => 
+      this.isSquareUnderAttack(
+        { row: kingPos.row, col }, 
+        opponentColor, 
+        this.board,
+        true
+      )
+    );
   }
-}
 
-  private calculatePawnMovesRaw(position: Position, validMoves: ValidMoves, blockedMoves: ValidMoves, board: Board): void {
-    const piece = board[position.row][position.col].piece;
-    if (!piece) return;
-
-    const direction = piece.color === PlayerColor.WHITE ? -1 : 1;
-    const startRow = piece.color === PlayerColor.WHITE ? 6 : 1;
-
-    if (this.isValidPosition(position.row + direction, position.col) &&
-        !board[position.row + direction][position.col].piece) {
-      validMoves.push({ row: position.row + direction, col: position.col });
-
-      if (position.row === startRow &&
-          this.isValidPosition(position.row + 2 * direction, position.col) &&
-          !board[position.row + 2 * direction][position.col].piece) {
-        validMoves.push({ row: position.row + 2 * direction, col: position.col });
-      }
-    }
-
-    for (const colOffset of [-1, 1]) {
-      const newRow = position.row + direction;
-      const newCol = position.col + colOffset;
-
-      if (this.isValidPosition(newRow, newCol)) {
-        const targetPiece = board[newRow][newCol].piece;
-        
-        if (targetPiece && targetPiece.color !== piece.color) {
-          validMoves.push({ row: newRow, col: newCol });
-        } else if (targetPiece) {
-          blockedMoves.push({ row: newRow, col: newCol });
-        }
-        else if (this.isEnPassantPossible(position, { row: newRow, col: newCol })) {
-          validMoves.push({ row: newRow, col: newCol });
-        }
-      }
+  private isEnPassantPossible(from: Position, to: Position): boolean {
+    const piece = this.board[from.row][from.col].piece;
+    if (!piece || piece.type !== PieceType.PAWN) return false;
+    
+    // Vérifie si c'est un mouvement diagonal
+    if (Math.abs(to.col - from.col) !== 1) return false;
+    
+    // Doit avoir un dernier mouvement
+    if (!this.lastMove) return false;
+  
+    const lastPiece = this.lastMove.piece;
+    
+    // Pour les blancs (qui montent)
+    if (piece.color === PlayerColor.WHITE) {
+      return (
+        from.row === 3 && // Le pion blanc doit être sur la 5e rangée
+        to.row === 2 && // Doit monter d'une rangée
+        lastPiece.type === PieceType.PAWN &&
+        lastPiece.color === PlayerColor.BLACK &&
+        this.lastMove.from.row === 1 &&
+        this.lastMove.to.row === 3 &&
+        this.lastMove.to.col === to.col &&
+        this.board[from.row][to.col].piece?.type === PieceType.PAWN &&
+        this.board[from.row][to.col].piece?.color === PlayerColor.BLACK
+      );
+    } 
+    // Pour les noirs (qui descendent)
+    else {
+      return (
+        from.row === 4 && // Le pion noir doit être sur la 4e rangée
+        to.row === 5 && // Doit descendre d'une rangée
+        lastPiece.type === PieceType.PAWN &&
+        lastPiece.color === PlayerColor.WHITE &&
+        this.lastMove.from.row === 6 &&
+        this.lastMove.to.row === 4 &&
+        this.lastMove.to.col === to.col &&
+        this.board[from.row][to.col].piece?.type === PieceType.PAWN &&
+        this.board[from.row][to.col].piece?.color === PlayerColor.WHITE
+      );
     }
   }
+
+public performCastling(kingPosition: Position, rookPosition: Position): boolean {
+  const king = this.board[kingPosition.row][kingPosition.col].piece;
+  const rook = this.board[rookPosition.row][rookPosition.col].piece;
+
+  if (!king || !rook || king.hasMoved || rook.hasMoved) {
+    return false;
+  }
+
+  const isKingSide = rookPosition.col === 7;
+  
+  const newKingCol = isKingSide ? 6 : 2;
+  const newRookCol = isKingSide ? 5 : 3;
+
+  this.board[kingPosition.row][newKingCol].piece = {
+    ...king,
+    hasMoved: true
+  };
+  this.board[kingPosition.row][newRookCol].piece = {
+    ...rook,
+    hasMoved: true
+  };
+
+  this.board[kingPosition.row][kingPosition.col].piece = null;
+  this.board[rookPosition.row][rookPosition.col].piece = null;
+
+  this.lastMove = {
+    from: kingPosition,
+    to: { row: kingPosition.row, col: newKingCol },
+    piece: king,
+    isCastling: true
+  };
+
+  this.handlePostMove();
+  return true;
+}
+
+
+
+private calculatePawnMovesRaw(position: Position, validMoves: ValidMoves, blockedMoves: ValidMoves, board: Board): void {
+  const piece = board[position.row][position.col].piece;
+  if (!piece) return;
+
+  const direction = piece.color === PlayerColor.WHITE ? -1 : 1;
+  const startRow = piece.color === PlayerColor.WHITE ? 6 : 1;
+
+  // Mouvement normal vers l'avant
+  if (this.isValidPosition(position.row + direction, position.col) &&
+      !board[position.row + direction][position.col].piece) {
+    validMoves.push({ row: position.row + direction, col: position.col });
+
+    // Double mouvement initial
+    if (position.row === startRow &&
+        this.isValidPosition(position.row + 2 * direction, position.col) &&
+        !board[position.row + 2 * direction][position.col].piece) {
+      validMoves.push({ row: position.row + 2 * direction, col: position.col });
+    }
+  }
+
+  // Captures diagonales (incluant la prise en passant)
+  for (const colOffset of [-1, 1]) {
+    const newRow = position.row + direction;
+    const newCol = position.col + colOffset;
+
+    if (this.isValidPosition(newRow, newCol)) {
+      const targetPiece = board[newRow][newCol].piece;
+      
+      // Capture normale
+      if (targetPiece && targetPiece.color !== piece.color) {
+        validMoves.push({ row: newRow, col: newCol });
+      } 
+      // Prise en passant
+      else if (!targetPiece && 
+               this.isEnPassantPossible(position, { row: newRow, col: newCol })) {
+        validMoves.push({ row: newRow, col: newCol });
+      }
+    }
+  }
+}
 
   private calculateRookMovesRaw(position: Position, validMoves: ValidMoves, blockedMoves: ValidMoves, board: Board): void {
     const directions = [
@@ -399,7 +467,13 @@ private isEnPassantPossible(from: Position, to: Position): boolean {
     }
   }
 
-  private calculateKingMovesRaw(position: Position, validMoves: ValidMoves, blockedMoves: ValidMoves, board: Board): void {
+  private calculateKingMovesRaw(
+    position: Position, 
+    validMoves: ValidMoves, 
+    blockedMoves: ValidMoves, 
+    board: Board,
+    isAttackCheck: boolean = false
+  ): void {
     const piece = board[position.row][position.col].piece;
     if (!piece) return;
   
@@ -423,14 +497,24 @@ private isEnPassantPossible(from: Position, to: Position): boolean {
       }
     }
   
-    if (!piece.hasMoved && position.col === 4) {
+    if (!isAttackCheck && !piece.hasMoved && position.col === 4) {
       const row = piece.color === PlayerColor.WHITE ? 7 : 0;
       
-      if (this.isCastlingPossible({ row, col: 4 }, { row, col: 7 })) {
+      const kingRook = board[row][7].piece;
+      if (kingRook && !kingRook.hasMoved && 
+          !board[row][5].piece && !board[row][6].piece &&
+          !this.isSquareUnderAttack({ row, col: 4 }, piece.color === PlayerColor.WHITE ? PlayerColor.BLACK : PlayerColor.WHITE, board, true) &&
+          !this.isSquareUnderAttack({ row, col: 5 }, piece.color === PlayerColor.WHITE ? PlayerColor.BLACK : PlayerColor.WHITE, board, true) &&
+          !this.isSquareUnderAttack({ row, col: 6 }, piece.color === PlayerColor.WHITE ? PlayerColor.BLACK : PlayerColor.WHITE, board, true)) {
         validMoves.push({ row, col: 6 });
       }
       
-      if (this.isCastlingPossible({ row, col: 4 }, { row, col: 0 })) {
+      const queenRook = board[row][0].piece;
+      if (queenRook && !queenRook.hasMoved &&
+          !board[row][1].piece && !board[row][2].piece && !board[row][3].piece &&
+          !this.isSquareUnderAttack({ row, col: 4 }, piece.color === PlayerColor.WHITE ? PlayerColor.BLACK : PlayerColor.WHITE, board, true) &&
+          !this.isSquareUnderAttack({ row, col: 3 }, piece.color === PlayerColor.WHITE ? PlayerColor.BLACK : PlayerColor.WHITE, board, true) &&
+          !this.isSquareUnderAttack({ row, col: 2 }, piece.color === PlayerColor.WHITE ? PlayerColor.BLACK : PlayerColor.WHITE, board, true)) {
         validMoves.push({ row, col: 2 });
       }
     }
@@ -469,7 +553,12 @@ private isEnPassantPossible(from: Position, to: Position): boolean {
     }
   }
 
-  private calculateRawMovesByPieceType(position: Position, pieceType: PieceType, board: Board = this.board): ValidMoves {
+  private calculateRawMovesByPieceType(
+    position: Position, 
+    pieceType: PieceType, 
+    board: Board = this.board,
+    isAttackCheck: boolean = false
+  ): ValidMoves {
     const moves: ValidMoves = [];
     const blockedMoves: ValidMoves = [];
     
@@ -490,11 +579,12 @@ private isEnPassantPossible(from: Position, to: Position): boolean {
         this.calculateQueenMovesRaw(position, moves, blockedMoves, board);
         break;
       case PieceType.KING:
-        this.calculateKingMovesRaw(position, moves, blockedMoves, board);
+        this.calculateKingMovesRaw(position, moves, blockedMoves, board, isAttackCheck);
         break;
     }
     return moves;
   }
+
 
   private getValidMovesForPiece(position: Position): ValidMoves {
     const piece = this.board[position.row][position.col].piece;
@@ -502,47 +592,77 @@ private isEnPassantPossible(from: Position, to: Position): boolean {
 
     const rawMoves = this.calculateRawMovesByPieceType(position, piece.type);
     
+    // Si le roi est en échec, filtre uniquement les mouvements qui peuvent le protéger
+    if (this.isKingInDanger && piece.color === this.currentTurn) {
+        return rawMoves.filter(move => {
+            const tempBoard = this.cloneBoard();
+            const targetPiece = tempBoard[move.row][move.col].piece;
+            
+            // Simule le mouvement
+            tempBoard[move.row][move.col].piece = tempBoard[position.row][position.col].piece;
+            tempBoard[position.row][position.col].piece = null;
+            
+            const kingPos = piece.type === PieceType.KING ? 
+                move : 
+                this.findKingPosition(piece.color, tempBoard);
+            
+            const opponentColor = piece.color === PlayerColor.WHITE ? PlayerColor.BLACK : PlayerColor.WHITE;
+            
+            // Vérifie si le roi n'est plus en échec après ce mouvement
+            const wouldStillBeInCheck = this.isSquareUnderAttack(kingPos, opponentColor, tempBoard);
+            
+            // Annule la simulation
+            tempBoard[position.row][position.col].piece = piece;
+            tempBoard[move.row][move.col].piece = targetPiece;
+            
+            return !wouldStillBeInCheck;
+        });
+    }
+    
+    // Pour les mouvements normaux, vérifie juste qu'ils ne mettent pas le roi en échec
     return rawMoves.filter(move => {
-      const tempBoard = this.cloneBoard();
-      tempBoard[move.row][move.col].piece = tempBoard[position.row][position.col].piece;
-      tempBoard[position.row][position.col].piece = null;
-      
-      try {
+        const tempBoard = this.cloneBoard();
+        const targetPiece = tempBoard[move.row][move.col].piece;
+        
+        tempBoard[move.row][move.col].piece = tempBoard[position.row][position.col].piece;
+        tempBoard[position.row][position.col].piece = null;
+        
         const kingPos = piece.type === PieceType.KING ? 
-          move : 
-          this.findKingPosition(piece.color, tempBoard);
+            move : 
+            this.findKingPosition(piece.color, tempBoard);
         
         const opponentColor = piece.color === PlayerColor.WHITE ? PlayerColor.BLACK : PlayerColor.WHITE;
         
         const wouldBeInCheck = this.isSquareUnderAttack(kingPos, opponentColor, tempBoard);
-      
+        
         return !wouldBeInCheck;
-      } catch (error) {
-        console.error(`Error validating move: ${error}`);
-        return false;
-      }
     });
-  }
+}
 
-  public getState(): GameState {
-    return {
-      board: [...this.board],
-      currentTurn: this.currentTurn,
-      selectedPiece: this.selectedPiece ? { ...this.selectedPiece } : null,
-      validMoves: [...this.validMoves],
-      blockedMoves: [...this.blockedMoves],
-      isInCheck: this.isInCheck,
-      isCheckmate: this.isCheckmate,
-      gameOver: this.gameOver,
-      winner: this.winner,
-      gameOverReason: this.gameOverReason,
-      lastMove: this.lastMove ? { ...this.lastMove } : null,
-      gameType: 'dice' as GameType,
-      remainingMoves: this.remainingMoves,
-      waitingForCoinToss: false,
-      waitingForDiceRoll: this.waitingForDiceRoll
-    };
-  }
+public getState(): GameState {
+  const capturedPieces = this.getCapturedPieces();
+  return {
+    board: [...this.board],
+    currentTurn: this.currentTurn,
+    selectedPiece: this.selectedPiece ? { ...this.selectedPiece } : null,
+    validMoves: [...this.validMoves],
+    blockedMoves: [...this.blockedMoves],
+    isInCheck: this.isInCheck,
+    isCheckmate: this.isCheckmate,
+    isStalemate: this.isStalemate,
+    gameOver: this.gameOver,
+    winner: this.winner,
+    gameOverReason: this.gameOverReason,
+    lastMove: this.lastMove ? { ...this.lastMove } : null,
+    gameType: 'dice' as GameType,
+    remainingMoves: this.remainingMoves,
+    waitingForCoinToss: false,
+    waitingForDiceRoll: this.waitingForDiceRoll,
+    capturedByWhite: capturedPieces.white,
+    capturedByBlack: capturedPieces.black
+  };
+}
+
 
 
   public selectPiece(position: Position): void {
@@ -594,70 +714,73 @@ private isEnPassantPossible(from: Position, to: Position): boolean {
         this.waitingForDiceRoll || this.remainingMoves <= 0) {
         return false;
     }
-
+  
     const validMoves = this.getValidMovesForPiece(from);
     const isValidMove = validMoves.some(move => move.row === to.row && move.col === to.col);
     
     if (!isValidMove) return false;
-
-    // Gestion spéciale de la prise en passant
-    if (fromPiece.type === PieceType.PAWN) {
-        const isEnPassant = this.isEnPassantPossible(from, to);
-        if (isEnPassant) {
-            if (fromPiece.color === PlayerColor.WHITE) {
-                this.board[from.row][to.col].piece = null;
-            } else {
-                this.board[from.row][to.col].piece = null;
-            }
-        }
+  
+    const targetPiece = this.board[to.row][to.col].piece;
+  
+    // Vérifier si c'est une prise en passant
+    let isEnPassant = false;
+    let capturedPiece = targetPiece;
+  
+    if (fromPiece.type === PieceType.PAWN && 
+        Math.abs(from.col - to.col) === 1 && 
+        !targetPiece) {
+      isEnPassant = this.isEnPassantPossible(from, to);
+      if (isEnPassant) {
+        capturedPiece = this.board[from.row][to.col].piece;
+        this.board[from.row][to.col].piece = null;
+      }
     }
-
-    // Gestion du roque
-    if (fromPiece.type === PieceType.KING) {
-        // ... [Le reste du code pour le roque reste inchangé] ...
-        return true;
+  
+    // Gérer la capture
+    if (capturedPiece) {
+      if (fromPiece.color === PlayerColor.WHITE) {
+        this.capturedByWhite.push({ ...capturedPiece });
+      } else {
+        this.capturedByBlack.push({ ...capturedPiece });
+      }
     }
-
-    this.lastMove = {
-        from: { ...from },
-        to: { ...to },
-        piece: { ...fromPiece }
-    };
-
-    // Déplace la pièce
+  
+    // Effectue le mouvement
     this.board[to.row][to.col].piece = { ...fromPiece, hasMoved: true };
     this.board[from.row][from.col].piece = null;
-
+  
     // Gestion de la promotion du pion
     if (fromPiece.type === PieceType.PAWN) {
-        // Pour un pion blanc qui atteint la rangée 0
-        if (fromPiece.color === PlayerColor.WHITE && to.row === 0) {
-            this.board[to.row][to.col].piece = {
-                type: PieceType.QUEEN,
-                color: PlayerColor.WHITE,
-                hasMoved: true
-            };
-        }
-        // Pour un pion noir qui atteint la rangée 7
-        else if (fromPiece.color === PlayerColor.BLACK && to.row === 7) {
-            this.board[to.row][to.col].piece = {
-                type: PieceType.QUEEN,
-                color: PlayerColor.BLACK,
-                hasMoved: true
-            };
-        }
+      const isLastRank = (fromPiece.color === PlayerColor.WHITE && to.row === 0) ||
+                        (fromPiece.color === PlayerColor.BLACK && to.row === 7);
+      
+      if (isLastRank) {
+        // Promouvoir automatiquement en reine
+        this.board[to.row][to.col].piece = {
+          type: PieceType.QUEEN,
+          color: fromPiece.color,
+          hasMoved: true
+        };
+      }
     }
-
+  
+    this.lastMove = {
+      from: { ...from },
+      to: { ...to },
+      piece: { ...fromPiece },
+      isEnPassant: isEnPassant,
+      capturedPiece: capturedPiece || null
+    };
+  
     this.handlePostMove();
     return true;
-}
+  }
 
   private handlePostMove(): void {
     this.selectedPiece = null;
     this.validMoves = [];
     this.blockedMoves = [];
   
-    // Vérifie si le mouvement a mis le roi adverse en échec
     const opponentColor = this.currentTurn === PlayerColor.WHITE ? PlayerColor.BLACK : PlayerColor.WHITE;
     const opponentKingPos = this.findKingPosition(opponentColor, this.board);
     const isOpponentInCheck = this.isSquareUnderAttack(opponentKingPos, this.currentTurn, this.board);
@@ -670,58 +793,74 @@ private isEnPassantPossible(from: Position, to: Position): boolean {
       this.remainingMoves = 1;
       this.findDefendingMoves();
       
-      // Vérifie l'échec et mat
-      this.handleCheckmate();
-      
-      if (!this.gameOver) {
-        return; // Continue le jeu si ce n'est pas un échec et mat
+      if (this.validDefendingMoves.length === 0) {
+        this.isCheckmate = opponentColor;
+        this.gameOver = true;
+        this.winner = this.currentTurn;
+        this.gameOverReason = 'checkmate';
       }
-    }
-  
-    // Reset des états d'échec si on n'est plus en échec
-    this.isInCheck = null;
-    this.isKingInDanger = false;
-    this.remainingMoves--;
-  
-    // Gestion normale de fin de coup
-    if (this.remainingMoves <= 0) {
-      if (this.isFirstMove) {
-        this.isFirstMove = false;
-        this.waitingForDiceRoll = true;
-      } else {
+    } else {
+      this.isInCheck = null;
+      this.isKingInDanger = false;
+      
+      // Vérifier le pat
+      if (this.isStaleCheckForPlayer(opponentColor)) {
+        this.isStalemate = true;
+        this.gameOver = true;
+        this.winner = null;
+        this.gameOverReason = 'stalemate';
+        return;
+      }
+      
+      // Gestion normale de fin de coup
+      this.remainingMoves--;
+      if (this.remainingMoves <= 0) {
         this.waitingForDiceRoll = true;
       }
     }
   }
 
-  public getCastlingPartners(position: Position): Position[] {
-    const piece = this.board[position.row][position.col].piece;
-    if (!piece || piece.hasMoved) return [];
-  
-    const row = piece.color === PlayerColor.WHITE ? 7 : 0;
-    const castlingPartners: Position[] = [];
-  
-    if (piece.type === PieceType.KING && position.col === 4) {
-      // Vérifie la possibilité de roque avec la tour droite
-      if (this.isCastlingPossible({ row, col: 4 }, { row, col: 7 })) {
-        castlingPartners.push({ row, col: 7 });
-      }
-      // Vérifie la possibilité de roque avec la tour gauche
-      if (this.isCastlingPossible({ row, col: 4 }, { row, col: 0 })) {
-        castlingPartners.push({ row, col: 0 });
-      }
-    } 
-    else if (piece.type === PieceType.ROOK && (position.col === 0 || position.col === 7)) {
-      const king = this.board[row][4].piece;
-      if (king?.type === PieceType.KING && !king.hasMoved) {
-        if (this.isCastlingPossible({ row, col: 4 }, position)) {
-          castlingPartners.push({ row, col: 4 });
-        }
+public getCapturedPieces(): { white: Piece[], black: Piece[] } {
+  return {
+    white: [...this.capturedByWhite],
+    black: [...this.capturedByBlack]
+  };
+}
+
+
+public getCastlingPartners(position: Position): Position[] {
+  const piece = this.board[position.row][position.col].piece;
+  if (!piece || piece.hasMoved) return [];
+
+  const row = piece.color === PlayerColor.WHITE ? 7 : 0;
+  const castlingPartners: Position[] = [];
+
+  // Si on sélectionne le roi
+  if (piece.type === PieceType.KING && position.col === 4) {
+    // Vérifie la tour droite
+    if (this.isCastlingPossible({ row, col: 4 }, { row, col: 7 })) {
+      castlingPartners.push({ row, col: 7 });
+    }
+    // Vérifie la tour gauche
+    if (this.isCastlingPossible({ row, col: 4 }, { row, col: 0 })) {
+      castlingPartners.push({ row, col: 0 });
+    }
+  }
+  // Si on sélectionne une tour
+  else if (piece.type === PieceType.ROOK && (position.col === 0 || position.col === 7)) {
+    const king = this.board[row][4].piece;
+    if (king?.type === PieceType.KING && !king.hasMoved) {
+      if (this.isCastlingPossible({ row, col: 4 }, position)) {
+        castlingPartners.push({ row, col: 4 });
       }
     }
-  
-    return castlingPartners;
   }
+
+  return castlingPartners;
+}
+
+
+
   
 
   public rollDice(value: number): DiceRoll {
@@ -792,7 +931,11 @@ private isEnPassantPossible(from: Position, to: Position): boolean {
     this.gameOver = false;
     this.winner = null;
     this.gameOverReason = null;
+    this.capturedByWhite = [];
+    this.capturedByBlack = [];
+    this.isStalemate = false;
   }
+  
 
   public unselectPiece(): void {
     this.selectedPiece = null;
