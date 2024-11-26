@@ -24,18 +24,18 @@ const Square: React.FC<SquareProps> = ({
   isCastlingPartner,
   onPress,
 }) => {
-  let backgroundColor = dark ? '#769656' : '#eeeed2'; // Retour aux couleurs vertes originales
+  let backgroundColor = dark ? '#769656' : '#eeeed2';
   
   if (selected) {
-    backgroundColor = 'rgba(255, 255, 0, 0.5)';  // Jaune semi-transparent pour la sélection
+    backgroundColor = 'rgba(255, 255, 0, 0.5)';  // Yellow for selection
   } else if (isValidMove) {
-    backgroundColor = 'rgba(0, 255, 0, 0.3)';    // Vert semi-transparent pour les mouvements valides
+    backgroundColor = 'rgba(0, 255, 0, 0.3)';    // Green for valid moves
   } else if (isCastlingPartner) {
-    backgroundColor = 'rgba(0, 0, 255, 0.3)';    // Bleu semi-transparent pour le partenaire de roque
+    backgroundColor = 'rgba(0, 0, 255, 0.3)';    // Blue for castling partner
   }
 
   if (isKingInCheck) {
-    backgroundColor = 'rgba(255, 0, 0, 0.3)';    // Rouge semi-transparent pour l'échec
+    backgroundColor = 'rgba(255, 0, 0, 0.3)';    // Red for check
   }
 
   return (

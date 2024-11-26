@@ -640,7 +640,6 @@ private calculatePawnMovesRaw(position: Position, validMoves: ValidMoves, blocke
 }
 
 public getState(): GameState {
-  const capturedPieces = this.getCapturedPieces();
   return {
     board: [...this.board],
     currentTurn: this.currentTurn,
@@ -658,8 +657,9 @@ public getState(): GameState {
     remainingMoves: this.remainingMoves,
     waitingForCoinToss: false,
     waitingForDiceRoll: this.waitingForDiceRoll,
-    capturedByWhite: capturedPieces.white,
-    capturedByBlack: capturedPieces.black
+    capturedByWhite: [...this.capturedByWhite],
+    capturedByBlack: [...this.capturedByBlack],
+    castlingPartners: this.selectedPiece ? this.getCastlingPartners(this.selectedPiece) : []
   };
 }
 

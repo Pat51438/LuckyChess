@@ -147,27 +147,24 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
           let rookPos: Position;
           const selectedPiece = state.board[castlingInitiator.row][castlingInitiator.col].piece;
           
-          // Détermine quelle pièce est le roi et quelle pièce est la tour
           if (selectedPiece?.type === PieceType.KING) {
             kingPos = castlingInitiator;
-            rookPos = position; // La position cliquée est la tour
+            rookPos = position;
           } else {
-            kingPos = position; // La position cliquée est le roi
-            rookPos = castlingInitiator; // La position initiale est la tour
+            kingPos = position;
+            rookPos = castlingInitiator;
           }
         
-          if (gameEngine instanceof DiceChessState) {
-            const success = gameEngine.performCastling(kingPos, rookPos);
-            
-            if (success) {
-              const newState = gameEngine.getState();
-              if (newState.isCheckmate) {
-                setGameOver(true);
-                setGameEndReason('checkmate');
-                setCheckmateWinner(newState.currentTurn);
-              }
-              setCurrentPlayer(newState.currentTurn);
+          const success = gameEngine.performCastling(kingPos, rookPos);
+          
+          if (success) {
+            const newState = gameEngine.getState();
+            if (newState.isCheckmate) {
+              setGameOver(true);
+              setGameEndReason('checkmate');
+              setCheckmateWinner(newState.currentTurn);
             }
+            setCurrentPlayer(newState.currentTurn);
           }
           
           setCastlingPartner(null);
@@ -179,19 +176,15 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
         const moveSuccessful = gameEngine.movePiece(state.selectedPiece, position);
         
         if (moveSuccessful) {
-          // Si c'est le premier mouvement des blancs
           if (!hasWhiteMoved && state.currentTurn === PlayerColor.WHITE) {
             setHasWhiteMoved(true);
           }
 
-          // Gérer la capture normale
           if (targetPiece) {
             if (state.selectedPiece) {
-              // Si la pièce capturée est noire, elle va dans les captures blanches
               if (targetPiece.color === PlayerColor.BLACK) {
                 setCapturedByWhite(prev => [...prev, { ...targetPiece }]);
               } else {
-                // Si la pièce capturée est blanche, elle va dans les captures noires
                 setCapturedByBlack(prev => [...prev, { ...targetPiece }]);
               }
             }
@@ -207,7 +200,6 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
             const capturedPawn = state.board[capturedPawnRow][position.col].piece;
             
             if (capturedPawn) {
-              // Même logique pour la capture en passant
               if (capturedPawn.color === PlayerColor.BLACK) {
                 setCapturedByWhite(prev => [...prev, { ...capturedPawn }]);
               } else {
@@ -231,30 +223,20 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
           return;
         }
         
-        // Si le mouvement a échoué mais qu'on clique sur une pièce de même couleur
         if (targetPiece && targetPiece.color === state.currentTurn) {
           gameEngine.selectPiece(position);
-          // Vérifier les possibilités de roque pour la nouvelle pièce sélectionnée
-          if (gameType === 'dice') {
-            const diceEngine = gameEngine as DiceChessState;
-            const castlingPartners = diceEngine.getCastlingPartners(position);
-            setCastlingPartner(castlingPartners.length > 0 ? castlingPartners[0] : null);
-            setCastlingInitiator(castlingPartners.length > 0 ? position : null);
-          }
+          const castlingPartners = gameEngine.getCastlingPartners(position);
+          setCastlingPartner(castlingPartners.length > 0 ? castlingPartners[0] : null);
+          setCastlingInitiator(castlingPartners.length > 0 ? position : null);
           forceUpdate();
           return;
         }
       } else {
-        // Si aucune pièce n'est sélectionnée et qu'on clique sur une pièce valide
         if (targetPiece && targetPiece.color === state.currentTurn) {
           gameEngine.selectPiece(position);
-          // Vérifier les possibilités de roque pour la pièce sélectionnée
-          if (gameType === 'dice') {
-            const diceEngine = gameEngine as DiceChessState;
-            const castlingPartners = diceEngine.getCastlingPartners(position);
-            setCastlingPartner(castlingPartners.length > 0 ? castlingPartners[0] : null);
-            setCastlingInitiator(castlingPartners.length > 0 ? position : null);
-          }
+          const castlingPartners = gameEngine.getCastlingPartners(position);
+          setCastlingPartner(castlingPartners.length > 0 ? castlingPartners[0] : null);
+          setCastlingInitiator(castlingPartners.length > 0 ? position : null);
           forceUpdate();
         }
       }
@@ -262,7 +244,6 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
     [gameEngine, gameOver, timeoutWinner, gameType, castlingPartner, castlingInitiator, 
       setCurrentPlayer, setCapturedByWhite, setCapturedByBlack, hasWhiteMoved, forceUpdate]
   );
-
   const state = gameEngine.getState();
 
   return (
@@ -322,41 +303,42 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
           </View>
   
           <View style={styles.boardSection}>
-            <View style={styles.board}>
-              {state.board.map((row, rowIndex) => (
-                <View key={rowIndex} style={styles.row}>
-                  {row.map((square, colIndex) => {
-                    const position = { row: rowIndex, col: colIndex };
-                    const piece = square.piece;
-                    
-                    const isKingInCheck = 
-                      piece?.type === PieceType.KING &&
-                      piece?.color === state.currentTurn &&
-                      state.isInCheck != null &&
-                      state.isInCheck === piece.color;
-  
-                    const isCastlingPartner = castlingPartner &&
-                      rowIndex === castlingPartner.row &&
-                      colIndex === castlingPartner.col;
-  
-                    return (
-                      <Square
-                        key={`${rowIndex}-${colIndex}`}
-                        dark={(rowIndex + colIndex) % 2 === 1}
-                        piece={piece}
-                        position={position}
-                        onPress={handleSquarePress}
-                        selected={state.selectedPiece?.row === rowIndex && state.selectedPiece?.col === colIndex}
-                        isValidMove={state.validMoves.some(move => move.row === rowIndex && move.col === colIndex)}
-                        isKingInCheck={isKingInCheck}
-                        isCastlingPartner={isCastlingPartner}
-                      />
-                    );
-                  })}
-                </View>
-              ))}
-            </View>
-          </View>
+  <View style={styles.board}>
+    {state.board.map((row, rowIndex) => (
+      <View key={rowIndex} style={styles.row}>
+        {row.map((square, colIndex) => {
+          const position = { row: rowIndex, col: colIndex };
+          const piece = square.piece;
+          
+          const isKingInCheck = 
+            piece?.type === PieceType.KING &&
+            piece?.color === state.currentTurn &&
+            state.isInCheck != null &&
+            state.isInCheck === piece.color;
+
+          // Check if this square is a castling partner
+          const isCastlingPartner = castlingPartner &&
+            rowIndex === castlingPartner.row &&
+            colIndex === castlingPartner.col;
+
+          return (
+            <Square
+              key={`${rowIndex}-${colIndex}`}
+              dark={(rowIndex + colIndex) % 2 === 1}
+              piece={piece}
+              position={position}
+              onPress={handleSquarePress}
+              selected={state.selectedPiece?.row === rowIndex && state.selectedPiece?.col === colIndex}
+              isValidMove={state.validMoves.some(move => move.row === rowIndex && move.col === colIndex)}
+              isKingInCheck={isKingInCheck}
+              isCastlingPartner={isCastlingPartner}  // This controls the blue highlight
+            />
+          );
+        })}
+      </View>
+    ))}
+  </View>
+</View>
   
           <View style={styles.lowerArea}>
             <View style={styles.capturedPiecesArea}>

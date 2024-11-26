@@ -65,4 +65,5 @@ export interface GameState {
     waitingForDiceRoll: boolean;
     capturedByWhite: Piece[];
     capturedByBlack: Piece[];
+    castlingPartners: Position[];
   }
