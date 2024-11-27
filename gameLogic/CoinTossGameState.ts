@@ -183,20 +183,20 @@ export class CoinTossChessState {
   public movePiece(from: Position, to: Position): boolean {
     const fromPiece = this.board[from.row][from.col].piece;
     if (!fromPiece || fromPiece.color !== this.currentTurn || this.waitingForCoinToss) {
-      return false;
+        return false;
     }
 
     // Check for castling
     const castlingPartners = this.getCastlingPartners(from);
     const isCastlingMove = castlingPartners.some(
-      partner => partner.row === to.row && partner.col === to.col
+        partner => partner.row === to.row && partner.col === to.col
     );
 
     if (isCastlingMove) {
-      return this.performCastling(
-        fromPiece.type === PieceType.KING ? from : to,
-        fromPiece.type === PieceType.KING ? to : from
-      );
+        return this.performCastling(
+            fromPiece.type === PieceType.KING ? from : to,
+            fromPiece.type === PieceType.KING ? to : from
+        );
     }
 
     const validMoves = this.getValidMovesForPiece(from);
@@ -208,57 +208,109 @@ export class CoinTossChessState {
     let capturedPiece = targetPiece;
 
     if (fromPiece.type === PieceType.PAWN && this.isEnPassantPossible(from, to)) {
-      capturedPiece = this.board[from.row][to.col].piece;
-      this.board[from.row][to.col].piece = null;
+        capturedPiece = this.board[from.row][to.col].piece;
+        this.board[from.row][to.col].piece = null;
     }
 
     if (capturedPiece) {
-      if (fromPiece.color === PlayerColor.WHITE) {
-        this.capturedByWhite.push({ ...capturedPiece });
-      } else {
-        this.capturedByBlack.push({ ...capturedPiece });
-      }
+        if (fromPiece.color === PlayerColor.WHITE) {
+            this.capturedByWhite.push({ ...capturedPiece });
+        } else {
+            this.capturedByBlack.push({ ...capturedPiece });
+        }
     }
 
     this.lastMove = {
-      from: { ...from },
-      to: { ...to },
-      piece: { ...fromPiece }
+        from: { ...from },
+        to: { ...to },
+        piece: { ...fromPiece }
     };
 
+    // Déplacer la pièce sur la nouvelle position
     this.board[to.row][to.col].piece = { ...fromPiece, hasMoved: true };
     this.board[from.row][from.col].piece = null;
 
+    // Vérifier si un pion doit être promu en reine
+    if (fromPiece.type === PieceType.PAWN) {
+        const isLastRank = (fromPiece.color === PlayerColor.WHITE && to.row === 0) ||
+                          (fromPiece.color === PlayerColor.BLACK && to.row === 7);
+        
+        if (isLastRank) {
+            // Promouvoir automatiquement en reine
+            this.board[to.row][to.col].piece = {
+                type: PieceType.QUEEN,
+                color: fromPiece.color,
+                hasMoved: true
+            };
+        }
+    }
+
     this.handlePostMove();
     return true;
+}
+
+private handlePostMove(): void {
+  this.selectedPiece = null;
+  this.validMoves = [];
+  this.blockedMoves = [];
+
+  const opponentColor = this.currentTurn === PlayerColor.WHITE ? PlayerColor.BLACK : PlayerColor.WHITE;
+  const opponentKingPos = this.findKingPosition(opponentColor, this.board);
+    
+  if (this.isSquareUnderAttack(opponentKingPos, this.currentTurn, this.board)) {
+    this.isInCheck = opponentColor;
+    this.currentTurn = opponentColor;
+    this.findDefendingMoves();
+      
+    if (this.validDefendingMoves.length === 0) {
+      this.isCheckmate = opponentColor;
+      this.gameOver = true;
+      this.winner = this.currentTurn;
+      this.gameOverReason = 'checkmate';
+    }
+    this.waitingForCoinToss = false;
+  } else {
+    this.isInCheck = null;
+
+    // Vérifier le pat avant de passer au prochain tour
+    if (this.isStaleCheckForPlayer(opponentColor)) {
+      this.isStalemate = true;
+      this.gameOver = true;
+      this.winner = null;
+      this.gameOverReason = 'stalemate';
+      return;
+    }
+
+    this.currentTurn = opponentColor;
+    this.waitingForCoinToss = true;
+  }
+}
+
+private isStaleCheckForPlayer(color: PlayerColor): boolean {
+  // Si le roi est en échec, ce n'est pas un pat
+  const kingPos = this.findKingPosition(color, this.board);
+  const opponentColor = color === PlayerColor.WHITE ? PlayerColor.BLACK : PlayerColor.WHITE;
+  
+  if (this.isSquareUnderAttack(kingPos, opponentColor, this.board)) {
+    return false;
   }
 
-  private handlePostMove(): void {
-    this.selectedPiece = null;
-    this.validMoves = [];
-    this.blockedMoves = [];
-
-    const opponentColor = this.currentTurn === PlayerColor.WHITE ? PlayerColor.BLACK : PlayerColor.WHITE;
-    const opponentKingPos = this.findKingPosition(opponentColor, this.board);
-    
-    if (this.isSquareUnderAttack(opponentKingPos, this.currentTurn, this.board)) {
-      this.isInCheck = opponentColor;
-      this.currentTurn = opponentColor;
-      this.findDefendingMoves();
-      
-      if (this.validDefendingMoves.length === 0) {
-        this.isCheckmate = opponentColor;
-        this.gameOver = true;
-        this.winner = this.currentTurn;
-        this.gameOverReason = 'checkmate';
+  // Vérifie si le joueur a des mouvements légaux disponibles
+  for (let row = 0; row < 8; row++) {
+    for (let col = 0; col < 8; col++) {
+      const piece = this.board[row][col].piece;
+      if (piece && piece.color === color) {
+        const moves = this.getValidMovesForPiece({ row, col });
+        if (moves.length > 0) {
+          return false;  // Le joueur a au moins un mouvement légal
+        }
       }
-      this.waitingForCoinToss = false;
-    } else {
-      this.isInCheck = null;
-      this.waitingForCoinToss = true;
     }
   }
 
+  // Si aucun mouvement légal n'est trouvé, c'est un pat
+  return true;
+}
   private isValidPosition(row: number, col: number): boolean {
     return row >= 0 && row < 8 && col >= 0 && col < 8;
   }
