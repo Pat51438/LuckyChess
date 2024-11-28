@@ -53,8 +53,6 @@ const CapturedPiecesDisplay: React.FC<CapturedPiecesDisplayProps> = ({
 const styles = StyleSheet.create({
   container: {
     padding: 8,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 4,
     minHeight: 60,
   },
   header: {
@@ -64,12 +62,12 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   piecesContainer: {
-    flexDirection: 'row',
+    flexDirection: 'row', 
     flexWrap: 'wrap',
     gap: 4,
   },
   piece: {
-    fontSize: 24,
+    fontSize: 30,
     ...Platform.select({
       ios: {
         textShadowColor: 'rgba(0, 0, 0, 0.5)',

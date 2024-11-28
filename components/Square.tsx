@@ -24,18 +24,18 @@ const Square: React.FC<SquareProps> = ({
   isCastlingPartner,
   onPress,
 }) => {
-  let backgroundColor = dark ? '#769656' : '#eeeed2';
+  let backgroundColor = dark ? '#808080' : '#ffffff';
   
   if (selected) {
-    backgroundColor = 'rgba(255, 255, 0, 0.5)';  // Yellow for selection
+    backgroundColor = 'rgba(100, 100, 100, 0.5)';
   } else if (isValidMove) {
-    backgroundColor = 'rgba(0, 255, 0, 0.3)';    // Green for valid moves
+    backgroundColor = 'rgba(100, 100, 100, 0.3)';
   } else if (isCastlingPartner) {
-    backgroundColor = 'rgba(0, 0, 255, 0.3)';    // Blue for castling partner
+    backgroundColor = 'rgba(100, 100, 100, 0.3)';
   }
 
   if (isKingInCheck) {
-    backgroundColor = 'rgba(255, 0, 0, 0.3)';    // Red for check
+    backgroundColor = 'rgba(180, 0, 0, 0.4)';
   }
 
   return (
@@ -62,16 +62,15 @@ const Square: React.FC<SquareProps> = ({
 const styles = StyleSheet.create({
   square: {
     flex: 1,
-    aspectRatio: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
   darkSquare: {
-    backgroundColor: '#769656',  // Vert foncé original
-  },
-  lightSquare: {
-    backgroundColor: '#eeeed2',  // Vert clair original
-  },
+    backgroundColor: '#707070',
+   },
+   lightSquare: {
+    backgroundColor: '#ffffff',
+   },
   squareOverlay: {
     position: 'absolute',
     width: '100%',

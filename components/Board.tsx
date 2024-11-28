@@ -1,20 +1,20 @@
 import React, { useState, useCallback } from "react";
 import { View, Text, StyleSheet, Modal, TouchableOpacity, Platform, Dimensions } from "react-native";
 import Square from "./Square";
-import Button from "./Button";
+import HamburgerMenu from "./HamburgerMunu";
 import Timer from "./Timer";
 import CapturedPiecesDisplay from "./CapturedPiece";
 import CoinTosser from "./CoinTosser";
 import DiceRoller from "./DiceRoller";
 import GameOverModal from "./GameOverModal";
-import { PlayerColor, Position, PieceType, Piece, GameType, GameEndReason } from "../types/Chess";  // Ajout de GameEndReason ici
+import PurplePatternBackground from './Background';
+import { PlayerColor, Position, PieceType, Piece, GameType, GameEndReason } from "../types/Chess";
 import { CoinTossChessState } from "../gameLogic/CoinTossGameState";
 import { DiceChessState } from "../gameLogic/DiceGameState";
 import { DiceRoll } from "../types/DiceGame";
 import { CoinToss } from "../types/CoinTossGame";
 
-const INITIAL_TIME = 600; // 10 minutes in seconds
-
+const INITIAL_TIME = 600;
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const BOARD_SIZE = Math.min(screenWidth * 0.95, screenHeight * 0.6);
 
@@ -246,173 +246,154 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
   );
   const state = gameEngine.getState();
 
-  return (
-    <View style={styles.container}>
-      <View style={styles.mainContainer}>
-        <View style={styles.headerContainer}>
-          <View style={styles.buttonContainer}>
-            <Button onNewGame={handleNewGame} variant="primary" size="medium" />
-            <TouchableOpacity 
-              style={styles.menuButton}
-              onPress={onReturnToMenu}
-            >
-              <Text style={styles.menuButtonText}>Return to Menu</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
   
-        <View style={styles.gameContainer}>
-          <View style={styles.topSection}>
-            <View style={styles.upperArea}>
+  return (
+    <PurplePatternBackground>
+      <View style={styles.container}>
+        <View style={styles.mainContainer}>
+          <HamburgerMenu 
+            onNewGame={handleNewGame}
+            onReturnToMenu={onReturnToMenu}
+          />
+  
+          <View style={styles.gameContainer}>
+            <View style={[styles.topSection, { marginTop: 40 }]}>
+              <View style={styles.upperArea}>
+                <View style={styles.capturedPiecesArea}>
+                  <CapturedPiecesDisplay
+                    capturedPieces={capturedByBlack}
+                    color={PlayerColor.BLACK}
+                  />
+                </View>
+              </View>
+  
+              {gameType === 'dice' && (
+  <View style={[styles.gameControlsArea, { marginTop: 20 }]}>
+    <DiceRoller
+      onDiceRoll={handleDiceRoll}
+      isWaitingForRoll={state.waitingForDiceRoll}
+      currentPlayer={currentPlayer}
+      remainingMoves={state.remainingMoves}
+      gameKey={gameKey}
+      isActive={state.currentTurn === PlayerColor.BLACK && !state.isCheckmate && !timeoutWinner && !gameOver} // Fixed this line
+      onTimeOut={handleTimeOut}
+    />
+  </View>
+)}
+            </View>
+  
+            <View style={styles.boardSection}>
+              <View style={styles.board}>
+                {state.board.map((row, rowIndex) => (
+                  <View key={rowIndex} style={styles.row}>
+                    {row.map((square, colIndex) => {
+                      const position = { row: rowIndex, col: colIndex };
+                      const piece = square.piece;
+                      
+                      const isKingInCheck = 
+                        piece?.type === PieceType.KING &&
+                        piece?.color === state.currentTurn &&
+                        state.isInCheck != null &&
+                        state.isInCheck === piece.color;
+  
+                      const isCastlingPartner = castlingPartner &&
+                        rowIndex === castlingPartner.row &&
+                        colIndex === castlingPartner.col;
+  
+                      return (
+                        <Square
+                          key={`${rowIndex}-${colIndex}`}
+                          dark={(rowIndex + colIndex) % 2 === 1}
+                          piece={piece}
+                          position={position}
+                          onPress={handleSquarePress}
+                          selected={state.selectedPiece?.row === rowIndex && state.selectedPiece?.col === colIndex}
+                          isValidMove={state.validMoves.some(move => move.row === rowIndex && move.col === colIndex)}
+                          isKingInCheck={isKingInCheck}
+                          isCastlingPartner={isCastlingPartner}
+                        />
+                      );
+                    })}
+                  </View>
+                ))}
+              </View>
+            </View>
+  
+            <View style={styles.lowerArea}>
               <View style={styles.capturedPiecesArea}>
                 <CapturedPiecesDisplay
-                  capturedPieces={capturedByBlack}
-                  color={PlayerColor.BLACK}
+                  capturedPieces={capturedByWhite}
+                  color={PlayerColor.WHITE}
                 />
                 <Timer
-                  key={`black-${timerKey}`}
-                  color={PlayerColor.BLACK}
-                  isActive={state.currentTurn === PlayerColor.BLACK && !state.isCheckmate && !timeoutWinner && !gameOver}
-                  initialTime={INITIAL_TIME}
-                  onTimeOut={handleTimeOut}
-                />
+  key={`white-${timerKey}`}
+  color={PlayerColor.WHITE}
+  isActive={hasWhiteMoved && state.currentTurn === PlayerColor.WHITE && !state.isCheckmate && !timeoutWinner && !gameOver}
+  initialTime={INITIAL_TIME}
+  onTimeOut={handleTimeOut}
+  onTimeUpdate={() => {}} // Add this line
+/>
               </View>
             </View>
   
-            {gameType === 'coinToss' && (
-              <View style={styles.gameControlsArea}>
-                <CoinTosser
-                  onCoinToss={handleCoinToss}
-                  isWaitingForToss={state.waitingForCoinToss}
-                  currentPlayer={currentPlayer}
-                />
-              </View>
-            )}
-            
-            {gameType === 'dice' && (
-              <View style={styles.gameControlsArea}>
-                <DiceRoller
-                  onDiceRoll={handleDiceRoll}
-                  isWaitingForRoll={state.waitingForDiceRoll}
-                  currentPlayer={currentPlayer}
-                  remainingMoves={state.remainingMoves}
-                  gameKey={gameKey}
-                />
-              </View>
-            )}
-          </View>
-  
-          <View style={styles.boardSection}>
-  <View style={styles.board}>
-    {state.board.map((row, rowIndex) => (
-      <View key={rowIndex} style={styles.row}>
-        {row.map((square, colIndex) => {
-          const position = { row: rowIndex, col: colIndex };
-          const piece = square.piece;
-          
-          const isKingInCheck = 
-            piece?.type === PieceType.KING &&
-            piece?.color === state.currentTurn &&
-            state.isInCheck != null &&
-            state.isInCheck === piece.color;
-
-          // Check if this square is a castling partner
-          const isCastlingPartner = castlingPartner &&
-            rowIndex === castlingPartner.row &&
-            colIndex === castlingPartner.col;
-
-          return (
-            <Square
-              key={`${rowIndex}-${colIndex}`}
-              dark={(rowIndex + colIndex) % 2 === 1}
-              piece={piece}
-              position={position}
-              onPress={handleSquarePress}
-              selected={state.selectedPiece?.row === rowIndex && state.selectedPiece?.col === colIndex}
-              isValidMove={state.validMoves.some(move => move.row === rowIndex && move.col === colIndex)}
-              isKingInCheck={isKingInCheck}
-              isCastlingPartner={isCastlingPartner}  // This controls the blue highlight
-            />
-          );
-        })}
-      </View>
-    ))}
-  </View>
-</View>
-  
-          <View style={styles.lowerArea}>
-            <View style={styles.capturedPiecesArea}>
-              <CapturedPiecesDisplay
-                capturedPieces={capturedByWhite}
-                color={PlayerColor.WHITE}
-              />
-              <Timer
-                key={`white-${timerKey}`}
-                color={PlayerColor.WHITE}
-                isActive={hasWhiteMoved && state.currentTurn === PlayerColor.WHITE && !state.isCheckmate && !timeoutWinner && !gameOver}
-                initialTime={INITIAL_TIME}
-                onTimeOut={handleTimeOut}
-              />
-            </View>
-          </View>
-  
-          <View style={styles.turnIndicator}>
-            <Text style={styles.turnIndicatorText}>
-              {state.isInCheck 
-                ? `${state.currentTurn === PlayerColor.WHITE ? "White" : "Black"}'s king is in check!`
-                : state.currentTurn === PlayerColor.WHITE 
-                  ? "White's turn" 
-                  : "Black's turn"}
-            </Text>
-          </View>
-        </View>
-      </View>
-  
-      <GameOverModal
-        isVisible={gameOver}
-        winner={checkmateWinner || timeoutWinner}
-        gameOverReason={gameEndReason}
-        onNewGame={confirmNewGame}
-        onReturnToMenu={onReturnToMenu}
-      />
-  
-      <Modal
-        visible={showConfirmDialog && !gameOver}
-        transparent={true}
-        animationType="fade"
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>New Game</Text>
-            <Text style={styles.modalText}>
-              Do you want to forfeit the current game and start a new one?
-            </Text>
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setShowConfirmDialog(false)}
-              >
-                <Text style={styles.buttonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.confirmButton]}
-                onPress={handleForfeit}
-              >
-                <Text style={styles.buttonText}>Forfeit</Text>
-              </TouchableOpacity>
+            <View style={styles.turnIndicator}>
+              <Text style={styles.turnIndicatorText}>
+                {state.isInCheck 
+                  ? `${state.currentTurn === PlayerColor.WHITE ? "White" : "Black"}'s king is in check!`
+                  : state.currentTurn === PlayerColor.WHITE 
+                    ? "White's turn" 
+                    : "Black's turn"}
+              </Text>
             </View>
           </View>
         </View>
-      </Modal>
-    </View>
+  
+        <GameOverModal
+          isVisible={gameOver}
+          winner={checkmateWinner || timeoutWinner}
+          gameOverReason={gameEndReason}
+          onNewGame={confirmNewGame}
+          onReturnToMenu={onReturnToMenu}
+        />
+  
+        <Modal
+          visible={showConfirmDialog && !gameOver}
+          transparent={true}
+          animationType="fade"
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>New Game</Text>
+              <Text style={styles.modalText}>
+                Do you want to forfeit the current game and start a new one?
+              </Text>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => setShowConfirmDialog(false)}
+                >
+                  <Text style={styles.buttonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.confirmButton]}
+                  onPress={handleForfeit}
+                >
+                  <Text style={styles.buttonText}>Forfeit</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      </View>
+    </PurplePatternBackground>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    width: '100%',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
     paddingVertical: 10,
   },
   mainContainer: {
@@ -472,7 +453,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 5,
-    backgroundColor: '#f5f5f5',
     zIndex: 1,
   },
   boardSection: {
@@ -485,8 +465,8 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: 1,
     borderWidth: 2,
-    borderColor: '#666',
-    backgroundColor: 'white',
+    borderColor: '#333',
+    backgroundColor: '#e0e0e0',
     overflow: 'hidden',
     ...Platform.select({
       ios: {
@@ -510,13 +490,15 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   turnIndicator: {
-    marginTop: 15,
-    alignItems: 'center',
+    backgroundColor: '#303030',
+    padding: 8,
+    borderRadius: 4,
+    marginTop: 8,
   },
   turnIndicatorText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    color: '#FFD700',
+    fontSize: 14,
+    fontWeight: '500',
   },
   modalOverlay: {
     flex: 1,

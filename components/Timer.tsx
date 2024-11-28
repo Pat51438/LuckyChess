@@ -7,19 +7,25 @@ interface TimerProps {
   isActive: boolean;
   initialTime: number;
   onTimeOut: (color: PlayerColor) => void;
+  onTimeUpdate: (time: number) => void;
+  currentTime?: number;  // Add this prop
 }
 
-const Timer: React.FC<TimerProps> = ({ color, isActive, initialTime, onTimeOut }) => {
-  const timeLeftRef = useRef(initialTime);
+const Timer: React.FC<TimerProps> = ({ 
+  color, 
+  isActive, 
+  initialTime,
+  onTimeOut,
+  onTimeUpdate,
+  currentTime  // Use this prop
+}) => {
+  const timeLeftRef = useRef(currentTime ?? initialTime);  // Use currentTime if provided
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const [displayTime, setDisplayTime] = React.useState(initialTime);
+  const [displayTime, setDisplayTime] = React.useState(currentTime ?? initialTime);
   const hasCalledTimeoutRef = useRef(false);
 
-  useEffect(() => {
-    timeLeftRef.current = initialTime;
-    setDisplayTime(initialTime);
-    hasCalledTimeoutRef.current = false;
-  }, [initialTime]);
+  // Remove the useEffect that resets timeLeftRef
+  // This was causing the timer to reset
 
   useEffect(() => {
     if (intervalRef.current) {
@@ -31,6 +37,7 @@ const Timer: React.FC<TimerProps> = ({ color, isActive, initialTime, onTimeOut }
       intervalRef.current = setInterval(() => {
         timeLeftRef.current -= 1;
         setDisplayTime(timeLeftRef.current);
+        onTimeUpdate(timeLeftRef.current);
         
         if (timeLeftRef.current === 0 && !hasCalledTimeoutRef.current) {
           hasCalledTimeoutRef.current = true;
@@ -47,7 +54,7 @@ const Timer: React.FC<TimerProps> = ({ color, isActive, initialTime, onTimeOut }
         clearInterval(intervalRef.current);
       }
     };
-  }, [isActive, color, onTimeOut]);
+  }, [isActive, color, onTimeOut, onTimeUpdate]);
 
   const minutes = Math.floor(displayTime / 60);
   const seconds = displayTime % 60;
@@ -55,9 +62,14 @@ const Timer: React.FC<TimerProps> = ({ color, isActive, initialTime, onTimeOut }
   return (
     <View style={[
       styles.container,
-      isActive ? styles.activeContainer : styles.inactiveContainer,
+      !isActive && styles.inactiveContainer,
       timeLeftRef.current === 0 && styles.timeoutContainer
     ]}>
+      <View style={styles.profileIcon}>
+        <Text style={styles.profileText}>
+          {color === PlayerColor.WHITE ? 'W' : 'B'}
+        </Text>
+      </View>
       <Text style={[
         styles.timerText,
         displayTime < 30 && styles.lowTimeText,
@@ -71,36 +83,46 @@ const Timer: React.FC<TimerProps> = ({ color, isActive, initialTime, onTimeOut }
 
 const styles = StyleSheet.create({
   container: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#f0f0f0',
-    minWidth: 80,
+    flexDirection: 'row',
     alignItems: 'center',
-  },
-  activeContainer: {
-    backgroundColor: '#e3f2fd',
-    borderColor: '#90caf9',
+    backgroundColor: '#1a1a1a',
+    borderRadius: 20,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    marginVertical: 4,
+    gap: 8,
   },
   inactiveContainer: {
-    backgroundColor: '#f5f5f5',
-    borderColor: '#e0e0e0',
+    opacity: 0.7,
   },
   timeoutContainer: {
-    backgroundColor: '#ffebee',
-    borderColor: '#ef9a9a',
+    backgroundColor: '#2a1a1a',
+  },
+  profileIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#333',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  profileText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   timerText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    color: '#333',
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+    letterSpacing: 0.5,
   },
   lowTimeText: {
-    color: '#f44336',
+    color: '#ff4444',
   },
   timeoutText: {
-    color: '#d32f2f',
-  }
+    color: '#ff0000',
+  },
 });
 
 export default Timer;
