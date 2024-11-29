@@ -1,0 +1,15 @@
+{
+  "dev": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-luckychess-dev-7c4d9-authRole",
+      "UnauthRoleArn": "arn:aws:iam::339712998143:role/amplify-luckychess-dev-7c4d9-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::339712998143:role/amplify-luckychess-dev-7c4d9-authRole",
+      "Region": "us-east-1",
+      "DeploymentBucketName": "amplify-luckychess-dev-7c4d9-deployment",
+      "UnauthRoleName": "amplify-luckychess-dev-7c4d9-unauthRole",
+      "StackName": "amplify-luckychess-dev-7c4d9",
+      "StackId": "arn:aws:cloudformation:us-east-1:339712998143:stack/amplify-luckychess-dev-7c4d9/c2752e00-ae54-11ef-9d45-0affe81e5395",
+      "AmplifyAppId": "dm8thjuty89om"
+    }
+  }
+}
