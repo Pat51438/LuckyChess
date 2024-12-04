@@ -10,6 +10,11 @@
       "StackName": "amplify-luckychess-dev-7c4d9",
       "StackId": "arn:aws:cloudformation:us-east-1:339712998143:stack/amplify-luckychess-dev-7c4d9/c2752e00-ae54-11ef-9d45-0affe81e5395",
       "AmplifyAppId": "dm8thjuty89om"
+    },
+    "categories": {
+      "api": {
+        "luckychess": {}
+      }
     }
   }
 }
