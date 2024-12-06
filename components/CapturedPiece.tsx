@@ -7,6 +7,14 @@ interface CapturedPiecesDisplayProps {
   color: PlayerColor;
 }
 
+const piecePoints: { [key: string]: number } = {
+  PAWN: 1,
+  ROOK: 5,
+  KNIGHT: 3,
+  BISHOP: 3,
+  QUEEN: 8,
+};
+
 const getPieceSymbol = (piece: Piece): string => {
   const isWhite = piece.color === PlayerColor.WHITE;
   switch (piece.type) {
@@ -31,43 +39,45 @@ const CapturedPiecesDisplay: React.FC<CapturedPiecesDisplayProps> = ({
   capturedPieces,
   color,
 }) => {
+  const totalPoints = capturedPieces.reduce(
+    (acc, piece) => acc + (piecePoints[piece.type] || 0),
+    0
+  );
+
   return (
     <View style={styles.container}>
       <View style={styles.piecesContainer}>
         {capturedPieces.map((piece, index) => (
-          <Text 
+          <Text
             key={`${piece.type}-${piece.color}-${index}`}
             style={[
               styles.piece,
-              { color: piece.color === PlayerColor.WHITE ? '#FFFFFF' : '#000000' }
+              { color: piece.color === PlayerColor.WHITE ? '#FFFFFF' : '#000000' },
             ]}
           >
             {getPieceSymbol(piece)}
           </Text>
         ))}
       </View>
+      <Text style={styles.pointsText}>{` Score: ${totalPoints} `}</Text>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
+    flexDirection: 'row', // Align pieces and points horizontally
+    alignItems: 'center',
     padding: 8,
     minHeight: 60,
   },
-  header: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginBottom: 4,
-    color: '#333',
-  },
   piecesContainer: {
-    flexDirection: 'row', 
+    flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 4,
   },
   piece: {
-    fontSize: 30,
+    fontSize: 22,
     ...Platform.select({
       ios: {
         textShadowColor: 'rgba(0, 0, 0, 0.5)',
@@ -83,6 +93,12 @@ const styles = StyleSheet.create({
         textShadow: '0px 1px 1px rgba(0, 0, 0, 0.5)',
       },
     }),
+  },
+  pointsText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 10, // Add spacing between pieces and points
+   color: '#FFFFFF'
   },
 });
 

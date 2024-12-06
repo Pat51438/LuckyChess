@@ -66,4 +66,6 @@ export interface GameState {
     capturedByWhite: Piece[];
     capturedByBlack: Piece[];
     castlingPartners: Position[];
+    initialTurnsRemaining: number;
+  canRollDice: boolean;
   }

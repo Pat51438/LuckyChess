@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Animated, Platform } from 'react-native';
 import { PlayerColor } from '../types/Chess';
 import { DiceRoll } from '../types/DiceGame';
@@ -12,23 +12,35 @@ interface DiceRollerProps {
   gameKey: number;
   isActive: boolean;
   onTimeOut: (color: PlayerColor) => void;
+  playerColor: PlayerColor;
+  instructionText: string;
+  currentTime: number;
+  onTimeUpdate: (time: number) => void;
 }
 
 const DiceDots: React.FC<{ value: number }> = ({ value }) => {
+  if (value === 0) {
+    return (
+      <View style={styles.realisticDiceContainer}>
+        <Text style={styles.rollButtonText}>Roll</Text>
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.dotContainer}>
+    <View style={styles.realisticDiceContainer}>
       {value === 1 && <View style={[styles.dot, styles.centerDot]} />}
       {value === 2 && (
         <>
-          <View style={[styles.dot, styles.topRightDot]} />
-          <View style={[styles.dot, styles.bottomLeftDot]} />
+          <View style={[styles.dot, styles.topLeftDot]} />
+          <View style={[styles.dot, styles.bottomRightDot]} />
         </>
       )}
       {value === 3 && (
         <>
-          <View style={[styles.dot, styles.topRightDot]} />
+          <View style={[styles.dot, styles.topLeftDot]} />
           <View style={[styles.dot, styles.centerDot]} />
-          <View style={[styles.dot, styles.bottomLeftDot]} />
+          <View style={[styles.dot, styles.bottomRightDot]} />
         </>
       )}
       {value === 4 && (
@@ -52,13 +64,12 @@ const DiceDots: React.FC<{ value: number }> = ({ value }) => {
         <>
           <View style={[styles.dot, styles.topLeftDot]} />
           <View style={[styles.dot, styles.topRightDot]} />
-          <View style={[styles.dot, styles.middleLeftDot]} />
-          <View style={[styles.dot, styles.middleRightDot]} />
+          <View style={[styles.dot, styles.centerLeftDot]} />
+          <View style={[styles.dot, styles.centerRightDot]} />
           <View style={[styles.dot, styles.bottomLeftDot]} />
           <View style={[styles.dot, styles.bottomRightDot]} />
         </>
       )}
-      {value === 0 && <Text style={styles.rollButtonText}>Roll</Text>}
     </View>
   );
 };
@@ -66,197 +77,141 @@ const DiceDots: React.FC<{ value: number }> = ({ value }) => {
 const DiceRoller: React.FC<DiceRollerProps> = ({
   onDiceRoll,
   isWaitingForRoll,
-  currentPlayer,
   remainingMoves,
   gameKey,
   isActive,
   onTimeOut,
+  playerColor,
+  currentTime,
+  onTimeUpdate,
 }) => {
   const [spinValue] = useState(new Animated.Value(0));
   const [isAnimating, setIsAnimating] = useState(false);
   const [diceValue, setDiceValue] = useState<number>(0);
-  const [whiteTime, setWhiteTime] = useState<number>(600);
-  const [blackTime, setBlackTime] = useState<number>(600);
 
   useEffect(() => {
-    if (gameKey === 0) {
-      setWhiteTime(600);
-      setBlackTime(600);
-      setDiceValue(0);
+    if (remainingMoves === 0) {
+      setDiceValue(0); // Automatically reset the dice to "Roll"
+    }
+  }, [remainingMoves]);
+
+  useEffect(() => {
+    if (gameKey !== 0) {
+      setDiceValue(0); // Reset dice to "Roll" on new game
       setIsAnimating(false);
     }
   }, [gameKey]);
 
-  const handleTimeUpdate = (time: number) => {
-    if (currentPlayer === PlayerColor.WHITE) {
-      setWhiteTime(time);
-    } else {
-      setBlackTime(time);
-    }
-  };
-
   const spin = spinValue.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0deg', '360deg']
+    outputRange: ['0deg', '360deg'],
   });
 
   const handleDiceRoll = () => {
     if (!isWaitingForRoll || isAnimating) return;
-    
+
     setIsAnimating(true);
-    setDiceValue(0);
-    const roll = Math.floor(Math.random() * 6) + 1;
-    
+    setDiceValue(0); // Reset dice to "Roll"
+
+    const roll = Math.floor(Math.random() * 6) + 1; // Generate random roll
     spinValue.setValue(0);
+
     Animated.timing(spinValue, {
       toValue: 4,
       duration: 1000,
       useNativeDriver: true,
     }).start(() => {
       setIsAnimating(false);
-      setDiceValue(roll);
-      onDiceRoll({ 
-        value: roll, 
-        moves: roll <= 3 ? roll : roll - 3, 
-        player: roll <= 3 ? PlayerColor.WHITE : PlayerColor.BLACK 
+      setDiceValue(roll); // Set rolled dice value
+      onDiceRoll({
+        value: roll,
+        moves: roll <= 3 ? roll : roll - 3,
+        player: roll <= 3 ? PlayerColor.WHITE : PlayerColor.BLACK,
       });
     });
   };
 
   return (
     <View style={styles.container}>
-      <View style={styles.topBar}>
-        <View style={styles.gameInfoContainer}>
-          <View style={styles.gameInfoSection}>
-            <View style={[
-              styles.timerPill, 
-              currentPlayer === PlayerColor.BLACK ? styles.blackPill : styles.whitePill
-            ]}>
-              <Timer
-                color={currentPlayer}
-                isActive={isActive}
-                initialTime={600}
-                currentTime={currentPlayer === PlayerColor.WHITE ? whiteTime : blackTime}
-                onTimeOut={onTimeOut}
-                onTimeUpdate={handleTimeUpdate}
-              />
-            </View>
-            <View style={styles.playerInfo}>
-              <Text style={styles.playerText}>
-                {currentPlayer === PlayerColor.WHITE ? "White" : "Black"}
-              </Text>
-              <Text style={styles.getsText}>Gets {remainingMoves} Move</Text>
-            </View>
-            <TouchableOpacity
-              style={[
-                styles.diceButton,
-                !isWaitingForRoll ? styles.disabledDice : null,
-                isAnimating ? styles.animatingDice : null,
-              ]}
-              onPress={handleDiceRoll}
-              disabled={!isWaitingForRoll || isAnimating}
-            >
-              <Animated.View style={[styles.dice, { transform: [{ rotate: spin }] }]}>
-                <DiceDots value={diceValue} />
-              </Animated.View>
-            </TouchableOpacity>
-          </View>
+      <View style={styles.darkContainer}>
+        <View style={styles.horizontalContainer}>
+          <Timer
+            color={playerColor}
+            isActive={isActive}
+            initialTime={600}
+            currentTime={currentTime}
+            onTimeOut={onTimeOut}
+            onTimeUpdate={onTimeUpdate}
+            gameKey={gameKey}
+          />
+          <Text style={styles.movesText}>
+            {isActive ? (remainingMoves === 0 ? "Roll the Dice" : `${remainingMoves} moves`) : ''}
+          </Text>
+          <TouchableOpacity
+            style={[
+              styles.diceButton,
+              !isActive || !isWaitingForRoll ? styles.disabledDice : null,
+              isAnimating ? styles.animatingDice : null,
+            ]}
+            onPress={handleDiceRoll}
+            disabled={!isActive || !isWaitingForRoll || isAnimating}
+          >
+            <Animated.View style={[styles.dice, { transform: [{ rotate: spin }] }]}>
+              <DiceDots value={diceValue} />
+            </Animated.View>
+          </TouchableOpacity>
         </View>
       </View>
     </View>
   );
 };
 
-
 const styles = StyleSheet.create({
   container: {
-    alignItems: 'flex-end',
-    width: '100%',
+    position: 'absolute',
+    left: 76,
+    top: '50%',
+    transform: [{ translateY: -30 }],
+    zIndex: 1,
   },
-  topBar: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    gap: 12,
-    paddingRight: 12,
-  },
-  timerPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-  },
-  blackPill: {
-    backgroundColor: '#000000',
-  },
-  whitePill: {
-    backgroundColor: '#FFFFFF',
-  },
-  blackText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  blackTimerText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  whiteTimerText: {
-    color: '#000000',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  gameInfoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  gameInfoSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#4B0082',
+  darkContainer: {
+    backgroundColor: 'rgba(40, 40, 40, 0.3)',
+    padding: 10,
     borderRadius: 12,
-    padding: 8,
+    minWidth: 140,
   },
-  playerInfo: {
+  horizontalContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
   },
-  playerText: {
-    color: '#FFD700',
-    fontSize: 14,
+  movesText: {
+    color: '#FFFFFF',
+    fontSize: 16,
     fontWeight: '500',
-  },
-  getsText: {
-    color: '#FFD700',
-    fontSize: 14,
-    fontWeight: '500',
+    marginHorizontal: 10,
   },
   diceButton: {
     width: 60,
     height: 60,
-    borderRadius: 10,
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 5,
       },
       android: {
-        elevation: 5,
+        elevation: 8,
       },
     }),
-  },
-  disabledDice: {
-    opacity: 0.7,
-  },
-  animatingDice: {
-    backgroundColor: '#FFFFFF',
   },
   dice: {
     width: '100%',
@@ -264,32 +219,52 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  dotContainer: {
-    width: '100%',
-    height: '100%',
-    padding: 6,
+  realisticDiceContainer: {
+    width: 60,
+    height: 60,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 5,
+      },
+      android: {
+        elevation: 5,
+      },
+    }),
   },
   dot: {
-    position: 'absolute',
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#000000',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#333',
   },
+  topLeftDot: { position: 'absolute', top: 8, left: 8 },
+  topRightDot: { position: 'absolute', top: 8, right: 8 },
+  bottomLeftDot: { position: 'absolute', bottom: 8, left: 8 },
+  bottomRightDot: { position: 'absolute', bottom: 8, right: 8 },
+  centerLeftDot: { position: 'absolute', left: 8, top: '50%', transform: [{ translateY: -20 }] },
+  centerRightDot: { position: 'absolute', right: 8, top: '50%', transform: [{ translateY: -20 }] },
+  centerDot: { position: 'absolute', top: '50%', left: '50%', transform: [{ translateX: -5 }, { translateY: -5 }] },
   rollButtonText: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#000000',
+    color: '#333',
   },
-  centerDot: { left: '50%', top: '50%', transform: [{ translateX: -4 }, { translateY: -4 }] },
-  topLeftDot: { left: '25%', top: '25%', transform: [{ translateX: -4 }, { translateY: -4 }] },
-  topRightDot: { right: '25%', top: '25%', transform: [{ translateX: 4 }, { translateY: -4 }] },
-  middleLeftDot: { left: '25%', top: '50%', transform: [{ translateX: -4 }, { translateY: -4 }] },
-  middleRightDot: { right: '25%', top: '50%', transform: [{ translateX: 4 }, { translateY: -4 }] },
-  bottomLeftDot: { left: '25%', bottom: '25%', transform: [{ translateX: -4 }, { translateY: 4 }] },
-  bottomRightDot: { right: '25%', bottom: '25%', transform: [{ translateX: 4 }, { translateY: 4 }] },
+  disabledDice: {
+    opacity: 0.7,
+    backgroundColor: '#F5F5F5',
+  },
+  animatingDice: {
+    backgroundColor: '#FFFFFF',
+  },
 });
 
 export default DiceRoller;
