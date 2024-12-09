@@ -68,4 +68,6 @@ export interface GameState {
     castlingPartners: Position[];
     initialTurnsRemaining: number;
   canRollDice: boolean;
+  canTossCoin: boolean; 
+  
   }

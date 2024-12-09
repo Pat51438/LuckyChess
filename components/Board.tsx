@@ -4,6 +4,7 @@ import Square from "./Square";
 import HamburgerMenu from "./HamburgerMunu";
 import CapturedPiecesDisplay from "./CapturedPiece";
 import DiceRoller from "./DiceRoller";
+import CoinTosser from "./CoinTosser";
 import GameOverModal from "./GameOverModal";
 import PurplePatternBackground from './Background';
 import UserImg from './UserComponent';
@@ -11,6 +12,7 @@ import { PlayerColor, Position, PieceType, Piece, GameType, GameEndReason } from
 import { CoinTossChessState } from "../gameLogic/CoinTossGameState";
 import { DiceChessState } from "../gameLogic/DiceGameState";
 import { DiceRoll } from "../types/DiceGame";
+import { CoinToss } from "../types/CoinTossGame";
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const BOARD_SIZE = Math.min(screenWidth * 0.95, screenHeight * 0.6);
@@ -33,13 +35,13 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
   const [gameOver, setGameOver] = useState(false);
   const [gameEndReason, setGameEndReason] = useState<GameEndReason>(null);
   const [currentPlayer, setCurrentPlayer] = useState<PlayerColor>(PlayerColor.WHITE);
-  const [lastDiceRoll, setLastDiceRoll] = useState<DiceRoll | null>(null);
   const [castlingPartner, setCastlingPartner] = useState<Position | null>(null);
   const [castlingInitiator, setCastlingInitiator] = useState<Position | null>(null);
   const [hasWhiteMoved, setHasWhiteMoved] = useState(false);
   const [gameKey, setGameKey] = useState(0);
   const [whiteTime, setWhiteTime] = useState(600);
   const [blackTime, setBlackTime] = useState(600);
+  const [lastPlayedColor, setLastPlayedColor] = useState<PlayerColor | null>(null);
 
   const handleTimeUpdate = useCallback((time: number, color: PlayerColor) => {
     if (color === PlayerColor.WHITE) {
@@ -76,17 +78,29 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
   const handleDiceRoll = useCallback((result: DiceRoll) => {
     if (gameType === 'dice') {
       const diceEngine = gameEngine as DiceChessState;
-      const diceResult = diceEngine.rollDice(result.value);
+      diceEngine.rollDice(result.value);
       const newState = diceEngine.getState();
       setCurrentPlayer(newState.currentTurn);
       forceUpdate();
     }
-  }, [gameEngine, setCurrentPlayer, forceUpdate, gameType]);
+  }, [gameEngine, gameType, forceUpdate]);
+
+  const handleCoinToss = useCallback((result: CoinToss) => {
+    if (gameType === 'coinToss') {
+        const coinEngine = gameEngine as CoinTossChessState;
+        const tossResult = coinEngine.tossCoin(result.result);
+        const newState = coinEngine.getState();
+
+        // Update the current player and trigger UI updates
+        setCurrentPlayer(newState.currentTurn);
+        forceUpdate();
+    }
+}, [gameEngine, gameType, forceUpdate]);
+
+
 
   const confirmNewGame = useCallback(() => {
     gameEngine.resetGame();
-  
-    // Reset captured pieces and game state
     setCapturedByWhite([]);
     setCapturedByBlack([]);
     setTimeoutWinner(null);
@@ -94,7 +108,6 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
     setGameOver(false);
     setGameEndReason(null);
     setCurrentPlayer(PlayerColor.WHITE);
-    setLastDiceRoll(null);
     setCastlingPartner(null);
     setCastlingInitiator(null);
     setHasWhiteMoved(false);
@@ -102,7 +115,6 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
     setBlackTime(600);
     setGameKey(prev => prev + 1);
     setShowConfirmDialog(false);
-  
     forceUpdate();
   }, [gameEngine, forceUpdate]);
 
@@ -110,21 +122,17 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
     (position: Position) => {
       const state = gameEngine.getState();
       
-      if (state.isCheckmate || gameOver || timeoutWinner) {
+      if (state.isCheckmate || gameOver || timeoutWinner || 
+          (gameType === 'coinToss' && state.waitingForCoinToss) ||
+          (gameType === 'dice' && (state.waitingForDiceRoll || state.remainingMoves <= 0))) {
         return;
       }
-
-      if (gameType === 'coinToss' && state.waitingForCoinToss) {
-        return;
-      }
-      if (gameType === 'dice' && (state.waitingForDiceRoll || state.remainingMoves <= 0)) {
-        return;
-      }
-
+ 
       const targetSquare = state.board[position.row][position.col];
       const targetPiece = targetSquare.piece;
-
+ 
       if (state.selectedPiece) {
+        // Handle deselection
         if (state.selectedPiece.row === position.row && state.selectedPiece.col === position.col) {
           gameEngine.unselectPiece();
           setCastlingPartner(null);
@@ -132,113 +140,77 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
           forceUpdate();
           return;
         }
-
+ 
+        // Handle castling
         if (castlingPartner && 
-          position.row === castlingPartner.row && 
-          position.col === castlingPartner.col &&
-          castlingInitiator) {
-          
-          let kingPos: Position;
-          let rookPos: Position;
+            position.row === castlingPartner.row && 
+            position.col === castlingPartner.col &&
+            castlingInitiator) {
           const selectedPiece = state.board[castlingInitiator.row][castlingInitiator.col].piece;
-          
-          if (selectedPiece?.type === PieceType.KING) {
-            kingPos = castlingInitiator;
-            rookPos = position;
-          } else {
-            kingPos = position;
-            rookPos = castlingInitiator;
-          }
-        
-          const success = gameEngine.performCastling(kingPos, rookPos);
-          
-          if (success) {
+          const [kingPos, rookPos] = selectedPiece?.type === PieceType.KING 
+            ? [castlingInitiator, position]
+            : [position, castlingInitiator];
+ 
+          if (gameEngine.performCastling(kingPos, rookPos)) {
             const newState = gameEngine.getState();
+            setLastPlayedColor(currentPlayer);
             if (newState.isCheckmate) {
               setGameOver(true);
               setGameEndReason('checkmate');
               setCheckmateWinner(newState.currentTurn);
             }
             setCurrentPlayer(newState.currentTurn);
+            setCastlingPartner(null);
+            setCastlingInitiator(null);
+            forceUpdate();
+            return;
           }
-          
-          setCastlingPartner(null);
-          setCastlingInitiator(null);
-          forceUpdate();
-          return;
         }
-
-        const moveSuccessful = gameEngine.movePiece(state.selectedPiece, position);
-        
-        if (moveSuccessful) {
+ 
+        // Handle regular move
+        if (gameEngine.movePiece(state.selectedPiece, position)) {
+          setLastPlayedColor(currentPlayer);
+          
           if (!hasWhiteMoved && state.currentTurn === PlayerColor.WHITE) {
             setHasWhiteMoved(true);
           }
-
-          if (targetPiece) {
-            if (state.selectedPiece) {
-              if (targetPiece.color === PlayerColor.BLACK) {
-                setCapturedByWhite(prev => [...prev, { ...targetPiece }]);
-              } else {
-                setCapturedByBlack(prev => [...prev, { ...targetPiece }]);
-              }
-            }
+ 
+          if (targetPiece && state.selectedPiece) {
+            const capturedList = targetPiece.color === PlayerColor.BLACK ? setCapturedByWhite : setCapturedByBlack;
+            capturedList(prev => [...prev, { ...targetPiece }]);
           }
           
-          if (state.selectedPiece) {
-            const movingPiece = state.board[state.selectedPiece.row][state.selectedPiece.col].piece;
-            if (movingPiece?.type === PieceType.PAWN && 
-                Math.abs(position.col - state.selectedPiece.col) === 1 && 
-                !targetPiece) {
-              const capturedPawnRow = state.selectedPiece.row;
-              const capturedPawn = state.board[capturedPawnRow][position.col].piece;
-              
-              if (capturedPawn) {
-                if (capturedPawn.color === PlayerColor.BLACK) {
-                  setCapturedByWhite(prev => [...prev, { ...capturedPawn }]);
-                } else {
-                  setCapturedByBlack(prev => [...prev, { ...capturedPawn }]);
-                }
-              }
-            }
-          }
-
           const newState = gameEngine.getState();
           setCapturedByWhite(newState.capturedByWhite);
           setCapturedByBlack(newState.capturedByBlack);
+          
           if (newState.isCheckmate) {
             setGameOver(true);
             setGameEndReason('checkmate');
             setCheckmateWinner(newState.currentTurn);
           }
+          
           setCurrentPlayer(newState.currentTurn);
           setCastlingPartner(null);
           setCastlingInitiator(null);
           forceUpdate();
           return;
         }
-        
-        if (targetPiece && targetPiece.color === state.currentTurn) {
-          gameEngine.selectPiece(position);
-          const castlingPartners = gameEngine.getCastlingPartners(position);
-          setCastlingPartner(castlingPartners.length > 0 ? castlingPartners[0] : null);
-          setCastlingInitiator(castlingPartners.length > 0 ? position : null);
-          forceUpdate();
-          return;
-        }
-      } else {
-        if (targetPiece && targetPiece.color === state.currentTurn) {
-          gameEngine.selectPiece(position);
-          const castlingPartners = gameEngine.getCastlingPartners(position);
-          setCastlingPartner(castlingPartners.length > 0 ? castlingPartners[0] : null);
-          setCastlingInitiator(castlingPartners.length > 0 ? position : null);
-          forceUpdate();
-        }
+      }
+      
+      // Handle piece selection
+      if (targetPiece && targetPiece.color === state.currentTurn) {
+        gameEngine.selectPiece(position);
+        const castlingPartners = gameEngine.getCastlingPartners(position);
+        const hasPartner = castlingPartners.length > 0;
+        setCastlingPartner(hasPartner ? castlingPartners[0] : null);
+        setCastlingInitiator(hasPartner ? position : null);
+        forceUpdate();
       }
     },
     [gameEngine, gameOver, timeoutWinner, gameType, castlingPartner, castlingInitiator, 
-      setCurrentPlayer, setCapturedByWhite, setCapturedByBlack, hasWhiteMoved, forceUpdate]
-  );
+     hasWhiteMoved, currentPlayer, forceUpdate]
+ );
 
   const state = gameEngine.getState();
   
@@ -251,7 +223,6 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
             onReturnToMenu={onReturnToMenu}
           />
     
-          {/* Top Captured Pieces */}
           <View style={styles.capturedPiecesTop}>
             <CapturedPiecesDisplay 
               capturedPieces={capturedByBlack} 
@@ -265,8 +236,8 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
                 <View style={styles.userImageContainer}>
                   <UserImg color={PlayerColor.BLACK} size={60} />
                 </View>
-                {gameType === 'dice' && (
-                  <View style={styles.diceContainer}>
+                <View style={styles.controlComponent}>
+                  {gameType === 'dice' && (
                     <DiceRoller
                       onDiceRoll={handleDiceRoll}
                       isWaitingForRoll={state.waitingForDiceRoll}
@@ -280,8 +251,24 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
                       currentTime={blackTime}
                       onTimeUpdate={(time) => handleTimeUpdate(time, PlayerColor.BLACK)}
                     />
-                  </View>
-                )}
+                  )}
+                  {gameType === 'coinToss' && (
+                    <CoinTosser
+                      onCoinToss={handleCoinToss}
+                      isWaitingForToss={state.waitingForCoinToss}
+                      currentPlayer={currentPlayer}
+                      gameKey={gameKey}
+                      isActive={state.currentTurn === PlayerColor.BLACK && !state.isCheckmate && !timeoutWinner && !gameOver}
+                      onTimeOut={handleTimeOut}
+                      playerColor={PlayerColor.BLACK}
+                      instructionText="Black's Turn to Toss"
+                      currentTime={blackTime}
+                      onTimeUpdate={(time) => handleTimeUpdate(time, PlayerColor.BLACK)}
+                      initialTurnsRemaining={state.initialTurnsRemaining}
+                      canTossCoin={state.canTossCoin}
+                    />
+                  )}
+                </View>
               </View>
     
               <View style={styles.boardSection}>
@@ -324,8 +311,8 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
                 <View style={styles.userImageContainer}>
                   <UserImg color={PlayerColor.WHITE} size={60} />
                 </View>
-                {gameType === 'dice' && (
-                  <View style={styles.diceContainer}>
+                <View style={styles.controlComponent}>
+                  {gameType === 'dice' && (
                     <DiceRoller
                       onDiceRoll={handleDiceRoll}
                       isWaitingForRoll={state.waitingForDiceRoll}
@@ -339,13 +326,29 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
                       currentTime={whiteTime}
                       onTimeUpdate={(time) => handleTimeUpdate(time, PlayerColor.WHITE)}
                     />
-                  </View>
-                )}
+                  )}
+                  {gameType === 'coinToss' && (
+                    <CoinTosser
+                      onCoinToss={handleCoinToss}
+                      isWaitingForToss={state.waitingForCoinToss}
+                      currentPlayer={currentPlayer}
+                      gameKey={gameKey}
+                      isActive={state.currentTurn === PlayerColor.WHITE && !state.isCheckmate &&
+                        !timeoutWinner && !gameOver}
+                      onTimeOut={handleTimeOut}
+                      playerColor={PlayerColor.WHITE}
+                      instructionText="White's Turn to Toss"
+                      currentTime={whiteTime}
+                      onTimeUpdate={(time) => handleTimeUpdate(time, PlayerColor.WHITE)}
+                      initialTurnsRemaining={state.initialTurnsRemaining}
+                      canTossCoin={state.canTossCoin}
+                    />
+                  )}
+                </View>
               </View>
             </View>
           </View>
     
-          {/* Bottom Captured Pieces */}
           <View style={styles.capturedPiecesBottom}>
             <CapturedPiecesDisplay 
               capturedPieces={capturedByWhite} 
@@ -353,7 +356,6 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
             />
           </View>
   
-          {/* Game Over Modal */}
           <GameOverModal
             isVisible={gameOver}
             winner={timeoutWinner || checkmateWinner}
@@ -361,11 +363,9 @@ const Board: React.FC<BoardProps> = ({ gameType, onReturnToMenu }) => {
             onNewGame={confirmNewGame}
             onReturnToMenu={onReturnToMenu}
           />
-  
         </View>
       </PurplePatternBackground>
   
-      {/* Confirm New Game Modal */}
       <Modal
         visible={showConfirmDialog}
         transparent={true}
@@ -423,20 +423,18 @@ const styles = StyleSheet.create({
   },
   capturedPiecesTop: {
     position: 'absolute',
-    top: 50, // Adjust distance from the top of the screen
+    top: 50,
     width: '100%',
     alignItems: 'center',
-    zIndex: 2, // Ensure it's above the board
+    zIndex: 2,
   },
-  
   capturedPiecesBottom: {
     position: 'absolute',
-    bottom: 20, // Adjust distance from the bottom of the screen
+    bottom: 20,
     width: '100%',
     alignItems: 'center',
-    zIndex: 2, // Ensure it's above the board
+    zIndex: 2,
   },
-  
   topControls: {
     marginBottom: 60,
     width: '100%',
@@ -453,15 +451,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    justifyContent: 'center', 
+    justifyContent: 'center',
   },
   userImageContainer: {
     position: 'absolute',
     left: 10,
   },
-  diceContainer: {
+  controlComponent: {
     position: 'absolute',
-    left: 60, // 10px from UserImg (40px) + 10px gap
+    left: 60,
   },
   boardSection: {
     width: BOARD_SIZE,

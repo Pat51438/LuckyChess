@@ -31,7 +31,8 @@ export class CoinTossChessState {
   private winner: PlayerColor | null;
   private gameOverReason: GameEndReason;
   private isStalemate: boolean;
-
+  private initialTurnsRemaining: number = 4;
+  private canTossCoin: boolean = false;
   constructor() {
     this.board = this.createInitialBoard();
     this.currentTurn = PlayerColor.WHITE;
@@ -50,6 +51,8 @@ export class CoinTossChessState {
     this.winner = null;
     this.gameOverReason = null;
     this.isStalemate = false;
+    this.initialTurnsRemaining = 4;
+    this.canTossCoin = false;
   }
 
   private createInitialBoard(): Board {
@@ -255,36 +258,56 @@ private handlePostMove(): void {
   this.blockedMoves = [];
 
   const opponentColor = this.currentTurn === PlayerColor.WHITE ? PlayerColor.BLACK : PlayerColor.WHITE;
-  const opponentKingPos = this.findKingPosition(opponentColor, this.board);
-    
-  if (this.isSquareUnderAttack(opponentKingPos, this.currentTurn, this.board)) {
+
+  // Logic for checkmate, stalemate, or transitioning turns
+  if (this.isSquareUnderAttack(this.findKingPosition(opponentColor, this.board), this.currentTurn, this.board)) {
     this.isInCheck = opponentColor;
-    this.currentTurn = opponentColor;
     this.findDefendingMoves();
-      
+
     if (this.validDefendingMoves.length === 0) {
       this.isCheckmate = opponentColor;
       this.gameOver = true;
       this.winner = this.currentTurn;
       this.gameOverReason = 'checkmate';
-    }
-    this.waitingForCoinToss = false;
-  } else {
-    this.isInCheck = null;
-
-    // Vérifier le pat avant de passer au prochain tour
-    if (this.isStaleCheckForPlayer(opponentColor)) {
-      this.isStalemate = true;
-      this.gameOver = true;
-      this.winner = null;
-      this.gameOverReason = 'stalemate';
       return;
     }
 
     this.currentTurn = opponentColor;
-    this.waitingForCoinToss = true;
+    this.waitingForCoinToss = false;
+    this.canTossCoin = false;
+  } else {
+    this.isInCheck = null;
+
+    if (this.initialTurnsRemaining > 0) {
+      this.initialTurnsRemaining--;
+      this.currentTurn = opponentColor;
+      this.waitingForCoinToss = false;
+      this.canTossCoin = false;
+
+      if (this.initialTurnsRemaining === 0) {
+        this.currentTurn = PlayerColor.BLACK;
+        this.waitingForCoinToss = true;
+        this.canTossCoin = true;
+      }
+    } else {
+      const playerWhoPlayed = this.currentTurn;
+      this.resetCoinTossForPlayer(playerWhoPlayed);
+
+      this.waitingForCoinToss = true;
+      this.canTossCoin = true;
+    }
   }
 }
+
+
+public resetCoinTossForPlayer(player: PlayerColor): void {
+  if (player === PlayerColor.WHITE || player === PlayerColor.BLACK) {
+    this.waitingForCoinToss = false;
+    this.canTossCoin = false;
+  }
+}
+
+
 
 private isStaleCheckForPlayer(color: PlayerColor): boolean {
   // Si le roi est en échec, ce n'est pas un pat
@@ -694,21 +717,34 @@ private isStaleCheckForPlayer(color: PlayerColor): boolean {
           waitingForDiceRoll: false,
           capturedByWhite: [...this.capturedByWhite],
           capturedByBlack: [...this.capturedByBlack],
-          castlingPartners: this.selectedPiece ? this.getCastlingPartners(this.selectedPiece) : []
+          castlingPartners: this.selectedPiece ? this.getCastlingPartners(this.selectedPiece) : [],
+          initialTurnsRemaining: this.initialTurnsRemaining,
+          canTossCoin: this.canTossCoin,
+          canRollDice: false,
         };
       }
+
         
-          public tossCoin(): CoinToss {
-            if (!this.waitingForCoinToss) {
-              return { result: this.currentTurn };
-            }
-        
-            const result = Math.random() < 0.5 ? PlayerColor.WHITE : PlayerColor.BLACK;
-            this.currentTurn = result;
-            this.waitingForCoinToss = false;
-            
-            return { result };
-          }
+    public tossCoin(result: PlayerColor): CoinToss {
+      if (!this.waitingForCoinToss || !this.canTossCoin) {
+          return { result: this.currentTurn };
+      }
+  
+      // Assign the result of the coin toss
+      this.currentTurn = result;
+  
+      // Enable the player to make their move
+      this.waitingForCoinToss = false;
+      this.canTossCoin = false;
+  
+      // Reset the opponent's coin toss state
+      const opponent = this.currentTurn === PlayerColor.WHITE ? PlayerColor.BLACK : PlayerColor.WHITE;
+      this.resetCoinTossForPlayer(opponent);
+  
+      return { result };
+  }
+  
+    
         
           public resetGame(): void {
             this.board = this.createInitialBoard();

@@ -648,7 +648,8 @@ export class DiceChessState {
       capturedByBlack: [...this.capturedByBlack],
       castlingPartners: this.selectedPiece ? this.getCastlingPartners(this.selectedPiece) : [],
       initialTurnsRemaining: this.initialTurnsRemaining,
-      canRollDice: this.canRollDice
+      canRollDice: this.canRollDice,
+      canTossCoin: false
     };
   }
 
